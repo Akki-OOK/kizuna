@@ -1,0 +1,51 @@
+# CMake build directories
+build/
+build-*/
+out/
+bin/
+lib/
+
+# CMake artifacts
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Visual Studio/VSCode
+.vs/
+.vscode/
+*.sln
+*.vcxproj*
+*.user
+.github/copilot-instructions.md
+
+# Compiled objects/binaries
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.exe
+*.pdb
+*.ilk
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Generated test binaries (if any)
+tests/*_test
+
+# Runtime data directories
+data/
+temp/
+backup/
