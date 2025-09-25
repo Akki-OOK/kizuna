@@ -63,5 +63,4 @@ Additional REPL helpers:
 ## Notes
 
 - Page 1 remains reserved for metadata; user pages start from 2.
-- Default database extension is `.kz` (tunable via `config::DB_FILE_EXTENSION`).
 - No WAL/concurrency yet future versions will build on this foundation.
