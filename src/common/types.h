@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // Standard library headers
 #include <cstdint>
@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <type_traits>
+#include <vector>
 
 namespace kizuna
 {
@@ -17,6 +18,11 @@ namespace kizuna
     using offset_t = uint16_t;    // offset within page
     using txn_id_t = uint32_t;    // id for MVCC
     using timestamp_t = uint64_t; // transaction timestamp
+
+    using catalog_id_t = uint32_t; // catalog tables stay tiny, 32-bit ids work great
+    using table_id_t = uint32_t;   // mirrors SQLite root page ids for tables
+    using column_id_t = uint32_t;  // one entry per column in __columns__
+    using index_id_t = uint32_t;   // future-proofing for __indexes__ catalog
 
     // ENUMS
     enum class PageType : uint8_t
@@ -59,6 +65,40 @@ namespace kizuna
         DATE = 8,      // 8 bytes: date without time
         TIMESTAMP = 9, // 8 bytes: date with time
         BLOB = 10      // Binary large object
+    };
+
+    enum class ConstraintType : uint8_t
+    {
+        NONE = 0,
+        NOT_NULL = 1,
+        PRIMARY_KEY = 2,
+        UNIQUE = 3,
+        DEFAULT_VALUE = 4
+    };
+
+    struct ColumnConstraint
+    {
+        bool not_null{false};
+        bool primary_key{false};
+        bool unique{false};
+        bool has_default{false};
+        std::string default_value; // literal text, same as SQLite catalog keeps it
+    };
+
+    struct ColumnDef
+    {
+        column_id_t id{0};
+        std::string name;           // user-provided identifier
+        DataType type{DataType::NULL_TYPE};
+        uint32_t length{0};         // VARCHAR(n) -> n, ignored for fixed-size types
+        ColumnConstraint constraint{};
+    };
+
+    struct TableDef
+    {
+        table_id_t id{0};
+        std::string name;                 // table name in CREATE TABLE
+        std::vector<ColumnDef> columns;   // column order defines row layout
     };
 
     enum class TransactionState : uint8_t
@@ -128,3 +168,4 @@ namespace kizuna
     }
 
 } // namespace kizuna
+

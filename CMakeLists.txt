@@ -33,6 +33,14 @@ add_library(kizuna_common STATIC
     ${SOURCE_DIR}/storage/file_manager.cpp
     ${SOURCE_DIR}/storage/page_manager.cpp
     ${SOURCE_DIR}/storage/record.cpp
+    ${SOURCE_DIR}/storage/table_heap.cpp
+    ${SOURCE_DIR}/catalog/schema.cpp
+    ${SOURCE_DIR}/catalog/catalog_manager.cpp
+    ${SOURCE_DIR}/sql/ast.cpp
+    ${SOURCE_DIR}/sql/ddl_parser.cpp
+    ${SOURCE_DIR}/sql/dml_parser.cpp
+    ${SOURCE_DIR}/engine/ddl_executor.cpp
+    ${SOURCE_DIR}/engine/dml_executor.cpp
 )
 
 # Public headers live under src
@@ -61,6 +69,11 @@ add_executable(run_tests
     ${TEST_DIR}/page_manager_test.cpp
     ${TEST_DIR}/record_test.cpp
     ${TEST_DIR}/page_manager_freelist_test.cpp
+    ${TEST_DIR}/storage/table_heap_test.cpp
+    ${TEST_DIR}/sql/dml_parser_test.cpp
+    ${TEST_DIR}/engine/dml_executor_test.cpp
+    ${TEST_DIR}/sql/ddl_parser_test.cpp
+    ${TEST_DIR}/catalog/catalog_manager_test.cpp
 )
 target_link_libraries(run_tests PRIVATE kizuna_common)
 target_include_directories(run_tests PRIVATE ${SOURCE_DIR})
@@ -70,3 +83,6 @@ add_custom_target(test
     DEPENDS run_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+
+

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +31,16 @@ namespace kizuna
 
         // Fetch page into cache (pins by default). Throws if not present on disk.
         Page &fetch(page_id_t id, bool pin = true);
+        // Shortcut to load the catalog metadata page (page 1).
+        Page &fetch_catalog_root(bool pin = true);
+
+        uint32_t catalog_version() const noexcept { return catalog_version_; }
+        page_id_t catalog_tables_root() const noexcept { return catalog_tables_root_; }
+        page_id_t catalog_columns_root() const noexcept { return catalog_columns_root_; }
+        table_id_t next_table_id() const noexcept { return next_table_id_; }
+        void set_catalog_tables_root(page_id_t id);
+        void set_catalog_columns_root(page_id_t id);
+        void set_next_table_id(table_id_t id);
 
         // Unpin a page; if dirty=true, marks for flush.
         void unpin(page_id_t id, bool dirty = false);
@@ -68,6 +78,11 @@ namespace kizuna
         // Metadata (page 1) stores: magic, version, first_trunk_id, free_count
         uint32_t first_trunk_id_{0};
         uint32_t free_count_{0};
+        uint32_t catalog_version_{config::CATALOG_SCHEMA_VERSION};
+        page_id_t catalog_tables_root_{0};
+        page_id_t catalog_columns_root_{0};
+        table_id_t next_table_id_{1};
+
 
         // Metadata helpers
         void init_metadata_if_needed();
@@ -90,3 +105,8 @@ namespace kizuna
         std::size_t find_free_frame() const;
     };
 }
+
+
+
+
+

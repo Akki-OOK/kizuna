@@ -53,9 +53,22 @@ namespace kizuna
 
         /// Maximum number of columns per table
         constexpr size_t MAX_COLUMNS_PER_TABLE = 1024;
-
         /// Maximum number of indexes per table
         constexpr size_t MAX_INDEXES_PER_TABLE = 64;
+
+        // ==================== CATALOG CONFIGURATION ====================
+
+        /// Catalog schema version (increment when layout changes)
+        constexpr uint32_t CATALOG_SCHEMA_VERSION = 2;
+
+        /// Internal catalog table names (modeled after SQLite's sqlite_master)
+        constexpr const char *CATALOG_TABLES_NAME = "__tables__";
+        constexpr const char *CATALOG_COLUMNS_NAME = "__columns__";
+        constexpr const char *CATALOG_INDEXES_NAME = "__indexes__";
+
+        /// Default on-disk naming for table storage files
+        constexpr const char *TABLE_FILE_PREFIX = "table_";
+        constexpr const char *TABLE_FILE_EXTENSION = ".db";
 
         // ==================== TRANSACTION CONFIGURATION ====================
 
@@ -218,3 +231,4 @@ namespace kizuna
 
     } // namespace config
 } // namespace kizuna
+

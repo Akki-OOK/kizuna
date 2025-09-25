@@ -78,6 +78,10 @@ namespace kizuna
         case StatusCode::COLUMN_NOT_FOUND: return "COLUMN_NOT_FOUND";
         case StatusCode::CONSTRAINT_VIOLATION: return "CONSTRAINT_VIOLATION";
         case StatusCode::DIVISION_BY_ZERO: return "DIVISION_BY_ZERO";
+        case StatusCode::TABLE_EXISTS: return "TABLE_EXISTS";
+        case StatusCode::DUPLICATE_COLUMN: return "DUPLICATE_COLUMN";
+        case StatusCode::INVALID_CONSTRAINT: return "INVALID_CONSTRAINT";
+        case StatusCode::UNSUPPORTED_DATA_TYPE: return "UNSUPPORTED_DATA_TYPE";
 
         // Network
         case StatusCode::CONNECTION_FAILED: return "CONNECTION_FAILED";
@@ -281,6 +285,25 @@ namespace kizuna
         ctx << operation << ": expected " << expected_type << ", actual " << actual_type;
         return QueryException(StatusCode::TYPE_ERROR, "Type error", ctx.str(), location);
     }
+    QueryException QueryException::table_exists(std::string_view table_name, const std::source_location &location) noexcept
+    {
+        return QueryException(StatusCode::TABLE_EXISTS, "Table already exists", table_name, location);
+    }
+
+    QueryException QueryException::duplicate_column(std::string_view column_name, const std::source_location &location) noexcept
+    {
+        return QueryException(StatusCode::DUPLICATE_COLUMN, "Duplicate column", column_name, location);
+    }
+
+    QueryException QueryException::invalid_constraint(std::string_view details, const std::source_location &location) noexcept
+    {
+        return QueryException(StatusCode::INVALID_CONSTRAINT, "Invalid constraint", details, location);
+    }
+
+    QueryException QueryException::unsupported_type(std::string_view type_name, const std::source_location &location) noexcept
+    {
+        return QueryException(StatusCode::UNSUPPORTED_DATA_TYPE, "Unsupported data type", type_name, location);
+    }
 
     // --------------------------- IndexException ------------------------
     IndexException IndexException::duplicate_key(std::string_view key, std::string_view index_name, const std::source_location &location) noexcept
@@ -306,4 +329,8 @@ namespace kizuna
     }
 
 } // namespace kizuna
+
+
+
+
 

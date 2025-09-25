@@ -1,6 +1,6 @@
-﻿#include <vector>
-#include <string>
 #include <cassert>
+#include <string>
+#include <vector>
 
 #include "storage/page.h"
 #include "storage/record.h"
@@ -12,7 +12,6 @@ static bool check_insert_read()
     Page p;
     p.init(PageType::DATA, 1);
 
-    // Build a small record
     std::vector<record::Field> fields;
     fields.push_back(record::from_int32(42));
     fields.push_back(record::from_string("hello"));
@@ -31,10 +30,8 @@ static bool check_insert_read()
         return false;
 
     if (decoded.size() != 2) return false;
-    // int32 check
-    if (decoded[0].type != DataType::INTEGER || decoded[0].payload.size() != 4) return false;
-    // string check
-    if (decoded[1].type != DataType::VARCHAR) return false;
+    if (decoded[0].type != DataType::INTEGER || decoded[0].is_null) return false;
+    if (decoded[1].type != DataType::VARCHAR || decoded[1].is_null) return false;
     return true;
 }
 
@@ -43,7 +40,7 @@ static bool check_erase()
     Page p;
     p.init(PageType::DATA, 2);
 
-    std::vector<uint8_t> data = {1,2,3,4};
+    std::vector<uint8_t> data = {1, 2, 3, 4};
     slot_id_t s1 = 0, s2 = 0;
     if (!p.insert(data.data(), static_cast<uint16_t>(data.size()), s1)) return false;
     if (!p.insert(data.data(), static_cast<uint16_t>(data.size()), s2)) return false;
@@ -51,8 +48,8 @@ static bool check_erase()
     if (!p.erase(s1)) return false;
 
     std::vector<uint8_t> out;
-    if (p.read(s1, out)) return false; // erased should fail
-    if (!p.read(s2, out)) return false; // second still present
+    if (p.read(s1, out)) return false;
+    if (!p.read(s2, out)) return false;
     return true;
 }
 
@@ -73,28 +70,25 @@ bool page_tests()
             if (!p.insert(payload.data(), static_cast<uint16_t>(payload.size()), s)) break;
             last_slot = s;
             ++inserts;
-            if (inserts > 10000) return false; // sanity cap
+            if (inserts > 10000) return false;
         }
-        // must have inserted at least one
         if (inserts == 0) return false;
 
-        // Read first and last back, and a few in the middle
         std::vector<uint8_t> out;
         if (!p.read(0, out)) return false;
         std::vector<record::Field> decoded;
         if (!record::decode(out.data(), out.size(), decoded)) return false;
         if (decoded.size() != 2) return false;
-        if (decoded[0].type != DataType::INTEGER) return false;
-        if (decoded[1].type != DataType::VARCHAR) return false;
+        if (decoded[0].type != DataType::INTEGER || decoded[0].is_null) return false;
+        if (decoded[1].type != DataType::VARCHAR || decoded[1].is_null) return false;
 
         if (!p.read(last_slot, out)) return false;
         decoded.clear();
         if (!record::decode(out.data(), out.size(), decoded)) return false;
         if (decoded.size() != 2) return false;
-        if (decoded[0].type != DataType::INTEGER) return false;
-        if (decoded[1].type != DataType::VARCHAR) return false;
+        if (decoded[0].type != DataType::INTEGER || decoded[0].is_null) return false;
+        if (decoded[1].type != DataType::VARCHAR || decoded[1].is_null) return false;
 
-        // Sample a few middle slots if present
         if (last_slot > 4)
         {
             for (slot_id_t s : {static_cast<slot_id_t>(1), static_cast<slot_id_t>(last_slot / 2), static_cast<slot_id_t>(last_slot - 1)})
@@ -108,9 +102,9 @@ bool page_tests()
         return true;
     };
 
-    // invalid slot should fail
     auto check_invalid_slot = []() -> bool {
-        Page p; p.init(PageType::DATA, 4);
+        Page p;
+        p.init(PageType::DATA, 4);
         std::vector<uint8_t> out;
         if (p.read(0, out)) return false;
         return true;

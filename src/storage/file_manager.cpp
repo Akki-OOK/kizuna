@@ -1,4 +1,4 @@
-﻿#include "storage/file_manager.h"
+#include "storage/file_manager.h"
 
 #include <algorithm>
 #include <cstring>
@@ -162,5 +162,37 @@ namespace kizuna
         write_page(static_cast<page_id_t>(next_id), zeros.data(), zeros.size());
         return static_cast<page_id_t>(next_id);
     }
+
+    std::string FileManager::table_filename(table_id_t table_id)
+    {
+        return std::string(config::TABLE_FILE_PREFIX) + std::to_string(table_id) + config::TABLE_FILE_EXTENSION;
+    }
+
+    std::filesystem::path FileManager::table_path(table_id_t table_id, const std::filesystem::path &directory)
+    {
+        if (directory.empty())
+        {
+            return std::filesystem::path(config::DEFAULT_DB_DIR) / table_filename(table_id);
+        }
+        return directory / table_filename(table_id);
+    }
+
+    bool FileManager::exists(const std::filesystem::path &path) noexcept
+    {
+        std::error_code ec;
+        return fs::exists(path, ec);
+    }
+
+    bool FileManager::remove_file(const std::filesystem::path &path)
+    {
+        std::error_code ec;
+        const bool removed = fs::remove(path, ec);
+        if (ec)
+        {
+            KIZUNA_THROW_IO(StatusCode::IO_ERROR, "Failed to remove file", path.string());
+        }
+        return removed;
+    }
+
 }
 

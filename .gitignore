@@ -18,7 +18,7 @@ compile_commands.json
 *.sln
 *.vcxproj*
 *.user
-.github/copilot-instructions.md
+.github/
 
 # Compiled objects/binaries
 *.o
@@ -49,3 +49,7 @@ tests/*_test
 data/
 temp/
 backup/
+
+# Project-local docs you may not want to publish
+kizuna-SRS.md
+docs/

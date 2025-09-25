@@ -1,4 +1,4 @@
-﻿#include "storage/page_manager.h"
+#include "storage/page_manager.h"
 
 #include <algorithm>
 
@@ -116,6 +116,16 @@ namespace kizuna
         return fr.page;
     }
 
+    Page &PageManager::fetch_catalog_root(bool pin)
+    {
+        auto &meta = fetch(config::FIRST_PAGE_ID, pin);
+        const auto type = static_cast<PageType>(meta.header().page_type);
+        if (type != PageType::METADATA)
+        {
+            KIZUNA_THROW_STORAGE(StatusCode::INVALID_PAGE_TYPE, "Catalog root is not metadata", std::to_string(meta.header().page_id));
+        }
+        return meta;
+    }
     void PageManager::unpin(page_id_t id, bool dirty)
     {
         auto it = page_table_.find(id);
@@ -306,13 +316,27 @@ namespace kizuna
         if (fm_.page_count() == 0)
         {
             // Create metadata page at id 1
-            const page_id_t id = fm_.allocate_page(); // should be 1
-            (void)id;
+            const page_id_t meta_id = fm_.allocate_page(); // should be 1
+            (void)meta_id;
             Page meta;
             meta.init(PageType::METADATA, config::FIRST_PAGE_ID);
             fm_.write_page(config::FIRST_PAGE_ID, meta.data());
+
+            // Allocate root pages for catalog tables/columns
+            Page tables;
+            catalog_tables_root_ = fm_.allocate_page();
+            tables.init(PageType::DATA, catalog_tables_root_);
+            fm_.write_page(catalog_tables_root_, tables.data());
+
+            Page columns;
+            catalog_columns_root_ = fm_.allocate_page();
+            columns.init(PageType::DATA, catalog_columns_root_);
+            fm_.write_page(catalog_columns_root_, columns.data());
+
             first_trunk_id_ = 0;
             free_count_ = 0;
+            next_table_id_ = 1;
+            catalog_version_ = config::CATALOG_SCHEMA_VERSION;
             save_metadata();
         }
     }
@@ -323,19 +347,64 @@ namespace kizuna
         fm_.read_page(config::FIRST_PAGE_ID, meta.data());
         const uint8_t *b = meta.data();
         const size_t off = sizeof(PageHeader);
-        uint32_t magic = 0, version = 0;
+        uint32_t magic = 0;
+        uint32_t version = 0;
         std::memcpy(&magic, b + off + 0, 4);
         std::memcpy(&version, b + off + 4, 4);
         if (magic != 0x4B5A464Du /* 'KZFM' */)
         {
-            // Initialize
             first_trunk_id_ = 0;
             free_count_ = 0;
+            catalog_tables_root_ = 0;
+            catalog_columns_root_ = 0;
+            next_table_id_ = 1;
+            catalog_version_ = config::CATALOG_SCHEMA_VERSION;
             save_metadata();
             return;
         }
+        catalog_version_ = version;
         std::memcpy(&first_trunk_id_, b + off + 8, 4);
         std::memcpy(&free_count_, b + off + 12, 4);
+        if (catalog_version_ >= 2)
+        {
+            std::memcpy(&catalog_tables_root_, b + off + 16, 4);
+            std::memcpy(&catalog_columns_root_, b + off + 20, 4);
+            uint32_t next_id_raw = 0;
+            std::memcpy(&next_id_raw, b + off + 24, 4);
+            next_table_id_ = static_cast<table_id_t>(next_id_raw);
+        }
+        else
+        {
+            catalog_tables_root_ = 0;
+            catalog_columns_root_ = 0;
+            next_table_id_ = 1;
+            catalog_version_ = config::CATALOG_SCHEMA_VERSION;
+        }
+
+        if (catalog_tables_root_ == 0)
+        {
+            Page tables;
+            catalog_tables_root_ = fm_.allocate_page();
+            tables.init(PageType::DATA, catalog_tables_root_);
+            fm_.write_page(catalog_tables_root_, tables.data());
+        }
+        if (catalog_columns_root_ == 0)
+        {
+            Page columns;
+            catalog_columns_root_ = fm_.allocate_page();
+            columns.init(PageType::DATA, catalog_columns_root_);
+            fm_.write_page(catalog_columns_root_, columns.data());
+        }
+        if (next_table_id_ == 0)
+        {
+            next_table_id_ = 1;
+        }
+
+        if (catalog_version_ != config::CATALOG_SCHEMA_VERSION)
+        {
+            catalog_version_ = config::CATALOG_SCHEMA_VERSION;
+            save_metadata();
+        }
     }
 
     void PageManager::save_metadata()
@@ -345,14 +414,35 @@ namespace kizuna
         uint8_t *b = meta.data();
         const size_t off = sizeof(PageHeader);
         const uint32_t magic = 0x4B5A464D; // 'KZFM'
-        const uint32_t version = 1;
+        const uint32_t version = catalog_version_;
         std::memcpy(b + off + 0, &magic, 4);
         std::memcpy(b + off + 4, &version, 4);
         std::memcpy(b + off + 8, &first_trunk_id_, 4);
         std::memcpy(b + off + 12, &free_count_, 4);
+        std::memcpy(b + off + 16, &catalog_tables_root_, 4);
+        std::memcpy(b + off + 20, &catalog_columns_root_, 4);
+        uint32_t next_id_raw = static_cast<uint32_t>(next_table_id_);
+        std::memcpy(b + off + 24, &next_id_raw, 4);
         fm_.write_page(config::FIRST_PAGE_ID, meta.data());
     }
 
+    void PageManager::set_catalog_tables_root(page_id_t id)
+    {
+        catalog_tables_root_ = id;
+        save_metadata();
+    }
+
+    void PageManager::set_catalog_columns_root(page_id_t id)
+    {
+        catalog_columns_root_ = id;
+        save_metadata();
+    }
+
+    void PageManager::set_next_table_id(table_id_t id)
+    {
+        next_table_id_ = id;
+        save_metadata();
+    }
     void PageManager::trunk_write_new(page_id_t trunk_id, uint32_t next_trunk, uint32_t leaf_count)
     {
         Page pg;
@@ -410,3 +500,12 @@ namespace kizuna
         return next;
     }
 }
+
+
+
+
+
+
+
+
+

@@ -1,9 +1,9 @@
-﻿#include <string>
-#include <vector>
 #include <cstdint>
+#include <string>
+#include <vector>
 
-#include "storage/record.h"
 #include "common/exception.h"
+#include "storage/record.h"
 
 using namespace kizuna;
 
@@ -15,22 +15,24 @@ static bool check_encode_decode_basic()
     fields.push_back(record::from_int64(4567890123LL));
     fields.push_back(record::from_double(3.14159));
     fields.push_back(record::from_string("alpha"));
+    fields.push_back(record::from_null(DataType::VARCHAR));
 
     auto payload = record::encode(fields);
 
     std::vector<record::Field> out;
     if (!record::decode(payload.data(), payload.size(), out)) return false;
     if (out.size() != fields.size()) return false;
-    if (out[4].type != DataType::VARCHAR) return false;
+    if (out[4].type != DataType::VARCHAR || out[4].is_null) return false;
+    if (!out[5].is_null) return false;
     return true;
 }
 
 static bool check_encode_too_large()
 {
-    // Construct a field that exceeds MAX_RECORD_SIZE on encode
     std::vector<record::Field> fields;
     std::string big(config::MAX_RECORD_SIZE + 100, 'x');
-    fields.push_back(record::from_string(big));
+    auto blob = std::vector<std::uint8_t>(big.begin(), big.end());
+    fields.push_back(record::from_blob(blob));
     try
     {
         auto payload = record::encode(fields);
@@ -47,4 +49,3 @@ bool record_tests()
 {
     return check_encode_decode_basic() && check_encode_too_large();
 }
-

@@ -1,6 +1,6 @@
-﻿#include <vector>
-#include <string>
 #include <filesystem>
+#include <string>
+#include <vector>
 
 #include "storage/file_manager.h"
 #include "storage/page_manager.h"
@@ -22,7 +22,6 @@ bool page_manager_tests()
         fm.open();
         PageManager pm(fm, /*capacity*/ 2);
 
-        // Create a new page and write a record
         page_id_t id = pm.new_page(PageType::DATA);
         auto &page = pm.fetch(id, true);
 
@@ -33,27 +32,24 @@ bool page_manager_tests()
         slot_id_t slot{};
         bool ok = page.insert(payload.data(), static_cast<uint16_t>(payload.size()), slot);
         if (!ok) return false;
-        pm.unpin(id, /*dirty*/ true); // mark dirty so it flushes on eviction/flush
+        pm.unpin(id, /*dirty*/ true);
 
-        // Evict by fetching more pages
         page_id_t id2 = pm.new_page(PageType::DATA);
         pm.unpin(id2, true);
 
-        // Free id2 and ensure it gets reused
         pm.free_page(id2);
         page_id_t id3 = pm.new_page(PageType::DATA);
-        if (id3 != id2) return false; // should reuse freed page id
+        if (id3 != id2) return false;
 
-        // Force flush all to disk
         pm.flush_all();
 
-        // Reload and verify
         auto &page2 = pm.fetch(id, true);
         std::vector<uint8_t> out;
         if (!page2.read(slot, out)) return false;
         std::vector<record::Field> decoded;
         if (!record::decode(out.data(), out.size(), decoded)) return false;
         if (decoded.size() != 2) return false;
+        if (decoded[0].is_null) return false;
         pm.unpin(id, false);
     }
     catch (...)

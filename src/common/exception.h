@@ -83,6 +83,10 @@ namespace kizuna
         COLUMN_NOT_FOUND = 604,
         CONSTRAINT_VIOLATION = 605,
         DIVISION_BY_ZERO = 606,
+        TABLE_EXISTS = 607,
+        DUPLICATE_COLUMN = 608,
+        INVALID_CONSTRAINT = 609,
+        UNSUPPORTED_DATA_TYPE = 610,
 
         // Network/Connection errors (700-799)
         CONNECTION_FAILED = 700,
@@ -347,6 +351,22 @@ namespace kizuna
             std::string_view expected_type,
             std::string_view actual_type,
             const std::source_location &location = std::source_location::current()) noexcept;
+
+        static QueryException table_exists(
+            std::string_view table_name,
+            const std::source_location &location = std::source_location::current()) noexcept;
+
+        static QueryException duplicate_column(
+            std::string_view column_name,
+            const std::source_location &location = std::source_location::current()) noexcept;
+
+        static QueryException invalid_constraint(
+            std::string_view details,
+            const std::source_location &location = std::source_location::current()) noexcept;
+
+        static QueryException unsupported_type(
+            std::string_view type_name,
+            const std::source_location &location = std::source_location::current()) noexcept;
     };
 
     /**
@@ -550,3 +570,5 @@ namespace kizuna
 } // namespace kizuna
 
 #endif // KIZUNA_COMMON_EXCEPTION_H
+
+

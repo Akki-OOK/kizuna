@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 #include <fstream>
@@ -33,6 +33,13 @@ namespace kizuna
         std::uint64_t size_bytes() const;                // total file size
         std::uint64_t page_count() const { return size_bytes() / config::PAGE_SIZE; }
 
+        // Table file helpers for catalog-managed storage
+        static std::string table_filename(table_id_t table_id);
+        static std::filesystem::path table_path(table_id_t table_id, const std::filesystem::path &directory = std::filesystem::path(config::DEFAULT_DB_DIR));
+        static bool exists(const std::filesystem::path &path) noexcept;
+        static bool remove_file(const std::filesystem::path &path);
+
+
         // Page I/O
         void read_page(page_id_t page_id, std::uint8_t *out_buffer, std::size_t len = config::PAGE_SIZE);
         void write_page(page_id_t page_id, const std::uint8_t *buffer, std::size_t len = config::PAGE_SIZE);
@@ -54,3 +61,4 @@ namespace kizuna
         void ensure_open_for_rw();
     };
 }
+
