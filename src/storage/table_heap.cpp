@@ -63,6 +63,35 @@ namespace kizuna
         return append_new_page(root_page_id_, payload);
     }
 
+    TableHeap::RowLocation TableHeap::update(const RowLocation &loc, const std::vector<uint8_t> &payload)
+    {
+        if (payload.size() > std::numeric_limits<uint16_t>::max())
+        {
+            KIZUNA_THROW_STORAGE(StatusCode::RECORD_TOO_LARGE,
+                                 "Record payload too large",
+                                 std::to_string(payload.size()));
+        }
+        if (!is_valid_page(loc.page_id))
+        {
+            KIZUNA_THROW_STORAGE(StatusCode::RECORD_NOT_FOUND, "Invalid page for update", std::to_string(loc.page_id));
+        }
+
+        auto &page = pm_.fetch(loc.page_id, true);
+        bool updated = page.update(loc.slot, payload.data(), static_cast<uint16_t>(payload.size()));
+        pm_.unpin(loc.page_id, updated);
+        if (updated)
+        {
+            return loc;
+        }
+
+        if (!erase(loc))
+        {
+            KIZUNA_THROW_STORAGE(StatusCode::RECORD_NOT_FOUND, "Update erase failed", std::to_string(loc.page_id));
+        }
+
+        return insert(payload);
+    }
+
     bool TableHeap::erase(const RowLocation &loc)
     {
         if (!is_valid_page(loc.page_id))

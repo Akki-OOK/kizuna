@@ -1,6 +1,7 @@
 #include "sql/dml_parser.h"
 
 #include <cctype>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -40,9 +41,6 @@ namespace kizuna::sql
             const std::vector<Token> &tokens() const { return tokens_; }
 
         private:
-            std::string_view input_;
-            std::vector<Token> tokens_;
-
             static bool is_identifier_start(char ch)
             {
                 return std::isalpha(static_cast<unsigned char>(ch)) || ch == '_';
@@ -125,39 +123,36 @@ namespace kizuna::sql
 
                     if (ch == '\'')
                     {
-                        size_t start = pos++;
+                        const size_t start = pos++;
                         std::string literal;
+                        literal.reserve(16);
                         bool closed = false;
                         while (pos < size)
                         {
-                            char curr = data[pos++];
-                            if (curr == '\'')
+                            const char cur = data[pos++];
+                            if (cur == '\'' && pos < size && data[pos] == '\'')
                             {
-                                if (pos < size && data[pos] == '\'')
-                                {
-                                    literal.push_back('\'');
-                                    ++pos;
-                                }
-                                else
-                                {
-                                    closed = true;
-                                    break;
-                                }
+                                literal.push_back('\'');
+                                ++pos;
+                            }
+                            else if (cur == '\'')
+                            {
+                                closed = true;
+                                break;
                             }
                             else
                             {
-                                literal.push_back(curr);
+                                literal.push_back(cur);
                             }
                         }
                         if (!closed)
                         {
                             Token tok;
-                            tok.type = TokenType::STRING;
-                            tok.text = literal;
-                            tok.upper = literal;
+                            tok.type = TokenType::END;
                             tok.position = start;
-                            tokens_.push_back(std::move(tok));
-                            break;
+                            tokens_.clear();
+                            tokens_.push_back(tok);
+                            return;
                         }
                         Token tok;
                         tok.type = TokenType::STRING;
@@ -168,17 +163,52 @@ namespace kizuna::sql
                         continue;
                     }
 
+                    // multi-character comparison operators
+                    if (ch == '!' || ch == '<' || ch == '>' || ch == '=')
+                    {
+                        const size_t start = pos;
+                        std::string text(1, ch);
+                        if (pos + 1 < size)
+                        {
+                            const char next = data[pos + 1];
+                            if ((ch == '!' && next == '=') ||
+                                (ch == '<' && (next == '=' || next == '>')) ||
+                                (ch == '>' && next == '='))
+                            {
+                                text.push_back(next);
+                                ++pos;
+                            }
+                        }
+                        Token tok;
+                        tok.type = TokenType::SYMBOL;
+                        tok.symbol = text[0];
+                        tok.text = text;
+                        tok.upper = text;
+                        tok.position = start;
+                        ++pos;
+                        tokens_.push_back(std::move(tok));
+                        continue;
+                    }
+
+                    // Single-character symbols
                     Token tok;
                     tok.type = TokenType::SYMBOL;
                     tok.symbol = ch;
-                    tok.text.assign(1, ch);
+                    tok.text = std::string(1, ch);
                     tok.upper = tok.text;
                     tok.position = pos;
-                    tokens_.push_back(tok);
                     ++pos;
+                    tokens_.push_back(std::move(tok));
                 }
-                tokens_.push_back(Token{TokenType::END, "", "", 0, input_.size()});
+
+                Token end;
+                end.type = TokenType::END;
+                end.position = input_.size();
+                tokens_.push_back(std::move(end));
             }
+
+            std::string_view input_;
+            std::vector<Token> tokens_;
         };
 
         class Parser
@@ -192,19 +222,13 @@ namespace kizuna::sql
             InsertStatement parse_insert()
             {
                 expect_keyword("INSERT");
-                if (!match_keyword("INTO"))
-                {
-                    syntax_error(peek(), "INTO");
-                }
-                std::string table = expect_identifier("table name");
+                expect_keyword("INTO");
                 InsertStatement stmt;
-                stmt.table_name = std::move(table);
+                stmt.table_name = expect_identifier("table name");
                 if (match_symbol('('))
                 {
                     if (match_symbol(')'))
-                    {
                         syntax_error(prev(), "column list");
-                    }
                     do
                     {
                         stmt.column_names.push_back(expect_identifier("column name"));
@@ -224,13 +248,18 @@ namespace kizuna::sql
             SelectStatement parse_select()
             {
                 expect_keyword("SELECT");
-                if (!match_symbol('*'))
-                {
-                    syntax_error(peek(), "*");
-                }
-                expect_keyword("FROM");
                 SelectStatement stmt;
+                stmt.columns = parse_select_list();
+                expect_keyword("FROM");
                 stmt.table_name = expect_identifier("table name");
+                if (match_keyword("WHERE"))
+                {
+                    stmt.where = parse_expression();
+                }
+                if (match_keyword("LIMIT"))
+                {
+                    stmt.limit = parse_limit_value();
+                }
                 consume_semicolon();
                 expect_end();
                 return stmt;
@@ -239,12 +268,44 @@ namespace kizuna::sql
             DeleteStatement parse_delete()
             {
                 expect_keyword("DELETE");
-                if (!match_keyword("FROM"))
-                {
-                    syntax_error(peek(), "FROM");
-                }
+                expect_keyword("FROM");
                 DeleteStatement stmt;
                 stmt.table_name = expect_identifier("table name");
+                if (match_keyword("WHERE"))
+                {
+                    stmt.where = parse_expression();
+                }
+                consume_semicolon();
+                expect_end();
+                return stmt;
+            }
+
+            UpdateStatement parse_update()
+            {
+                expect_keyword("UPDATE");
+                UpdateStatement stmt;
+                stmt.table_name = expect_identifier("table name");
+                expect_keyword("SET");
+                do
+                {
+                    std::string column = expect_identifier("column name");
+                    expect_symbol('=');
+                    auto value = parse_expression();
+                    UpdateAssignment assignment;
+                    assignment.column_name = std::move(column);
+                    assignment.value = std::move(value);
+                    stmt.assignments.push_back(std::move(assignment));
+                } while (match_symbol(','));
+
+                if (stmt.assignments.empty())
+                {
+                    syntax_error(peek(), "assignment");
+                }
+
+                if (match_keyword("WHERE"))
+                {
+                    stmt.where = parse_expression();
+                }
                 consume_semicolon();
                 expect_end();
                 return stmt;
@@ -275,14 +336,19 @@ namespace kizuna::sql
                 return tokens_[position_ - 1];
             }
 
-            const Token &consume()
-            {
-                return tokens_[position_++];
-            }
-
             bool match_symbol(char symbol)
             {
-                if (peek().type == TokenType::SYMBOL && peek().symbol == symbol)
+                if (peek().type == TokenType::SYMBOL && peek().text.size() == 1 && peek().symbol == symbol)
+                {
+                    ++position_;
+                    return true;
+                }
+                return false;
+            }
+
+            bool match_symbol_text(std::string_view symbol)
+            {
+                if (peek().type == TokenType::SYMBOL && peek().text == symbol)
                 {
                     ++position_;
                     return true;
@@ -357,6 +423,159 @@ namespace kizuna::sql
                 return row;
             }
 
+            std::vector<SelectItem> parse_select_list()
+            {
+                std::vector<SelectItem> items;
+                if (match_symbol('*'))
+                {
+                    items.push_back(SelectItem::star());
+                    return items;
+                }
+                do
+                {
+                    items.push_back(SelectItem::column_item(parse_column_ref()));
+                } while (match_symbol(','));
+                return items;
+            }
+
+            ColumnRef parse_column_ref()
+            {
+                ColumnRef ref;
+                std::string first = expect_identifier("column");
+                if (match_symbol('.'))
+                {
+                    ref.table = std::move(first);
+                    ref.column = expect_identifier("column");
+                }
+                else
+                {
+                    ref.column = std::move(first);
+                }
+                return ref;
+            }
+
+            std::unique_ptr<Expression> parse_expression()
+            {
+                return parse_or();
+            }
+
+            std::unique_ptr<Expression> parse_or()
+            {
+                auto expr = parse_and();
+                while (match_keyword("OR"))
+                {
+                    auto rhs = parse_and();
+                    expr = Expression::make_binary(BinaryOperator::OR, std::move(expr), std::move(rhs));
+                }
+                return expr;
+            }
+
+            std::unique_ptr<Expression> parse_and()
+            {
+                auto expr = parse_not();
+                while (match_keyword("AND"))
+                {
+                    auto rhs = parse_not();
+                    expr = Expression::make_binary(BinaryOperator::AND, std::move(expr), std::move(rhs));
+                }
+                return expr;
+            }
+
+            std::unique_ptr<Expression> parse_not()
+            {
+                if (match_keyword("NOT"))
+                {
+                    auto operand = parse_not();
+                    return Expression::make_unary(UnaryOperator::NOT, std::move(operand));
+                }
+                return parse_comparison();
+            }
+
+            std::unique_ptr<Expression> parse_comparison()
+            {
+                auto left = parse_primary();
+                if (match_symbol_text("="))
+                {
+                    auto right = parse_primary();
+                    return Expression::make_binary(BinaryOperator::EQUAL, std::move(left), std::move(right));
+                }
+                if (match_symbol_text("!=") || match_symbol_text("<>"))
+                {
+                    auto right = parse_primary();
+                    return Expression::make_binary(BinaryOperator::NOT_EQUAL, std::move(left), std::move(right));
+                }
+                if (match_symbol_text("<="))
+                {
+                    auto right = parse_primary();
+                    return Expression::make_binary(BinaryOperator::LESS_EQUAL, std::move(left), std::move(right));
+                }
+                if (match_symbol_text(">="))
+                {
+                    auto right = parse_primary();
+                    return Expression::make_binary(BinaryOperator::GREATER_EQUAL, std::move(left), std::move(right));
+                }
+                if (match_symbol_text("<"))
+                {
+                    auto right = parse_primary();
+                    return Expression::make_binary(BinaryOperator::LESS, std::move(left), std::move(right));
+                }
+                if (match_symbol_text(">"))
+                {
+                    auto right = parse_primary();
+                    return Expression::make_binary(BinaryOperator::GREATER, std::move(left), std::move(right));
+                }
+                return left;
+            }
+
+            std::unique_ptr<Expression> parse_primary()
+            {
+                if (match_symbol('('))
+                {
+                    auto expr = parse_expression();
+                    expect_symbol(')');
+                    return expr;
+                }
+
+                const Token &tok = peek();
+                if (is_literal_token(tok))
+                {
+                    auto literal = parse_literal();
+                    auto expr = Expression::make_literal(std::move(literal));
+                    return parse_null_test(std::move(expr));
+                }
+
+                if (tok.type == TokenType::IDENT)
+                {
+                    auto column = parse_column_ref();
+                    auto expr = Expression::make_column(std::move(column));
+                    return parse_null_test(std::move(expr));
+                }
+
+                syntax_error(tok, "expression");
+            }
+
+            std::unique_ptr<Expression> parse_null_test(std::unique_ptr<Expression> base)
+            {
+                if (match_keyword("IS"))
+                {
+                    bool is_not = match_keyword("NOT");
+                    expect_keyword("NULL");
+                    base = Expression::make_null_check(std::move(base), is_not);
+                }
+                return base;
+            }
+
+            bool is_literal_token(const Token &tok) const
+            {
+                if (tok.type == TokenType::STRING || tok.type == TokenType::NUMBER)
+                    return true;
+                if (tok.type == TokenType::IDENT)
+                {
+                    return tok.upper == "NULL" || tok.upper == "TRUE" || tok.upper == "FALSE";
+                }
+                return false;
+            }
+
             LiteralValue parse_literal()
             {
                 const Token &tok = peek();
@@ -382,13 +601,29 @@ namespace kizuna::sql
                         return LiteralValue::boolean(true);
                     if (upper == "FALSE")
                         return LiteralValue::boolean(false);
-                    syntax_error(tok, "literal");
-                }
-                if (tok.type == TokenType::SYMBOL && tok.symbol == '(')
-                {
-                    syntax_error(tok, "literal");
                 }
                 syntax_error(tok, "literal");
+            }
+
+            std::int64_t parse_limit_value()
+            {
+                const Token &tok = peek();
+                if (tok.type != TokenType::NUMBER || tok.text.find('.') != std::string::npos)
+                {
+                    syntax_error(tok, "integer literal");
+                }
+                ++position_;
+                try
+                {
+                    long long value = std::stoll(tok.text);
+                    if (value < 0)
+                        throw std::out_of_range("negative");
+                    return static_cast<std::int64_t>(value);
+                }
+                catch (...)
+                {
+                    syntax_error(tok, "non-negative integer");
+                }
             }
 
             [[noreturn]] void syntax_error(const Token &tok, std::string_view expected)
@@ -421,6 +656,13 @@ namespace kizuna::sql
         Lexer lexer(sql);
         Parser parser(sql, lexer.tokens());
         return parser.parse_delete();
+    }
+
+    UpdateStatement parse_update(std::string_view sql)
+    {
+        Lexer lexer(sql);
+        Parser parser(sql, lexer.tokens());
+        return parser.parse_update();
     }
 
     TruncateStatement parse_truncate(std::string_view sql)
@@ -456,6 +698,12 @@ namespace kizuna::sql
         {
             result.kind = DMLStatementKind::DELETE;
             result.del = parser.parse_delete();
+            return result;
+        }
+        if (first.upper == "UPDATE")
+        {
+            result.kind = DMLStatementKind::UPDATE;
+            result.update = parser.parse_update();
             return result;
         }
         if (first.upper == "TRUNCATE")

@@ -31,9 +31,13 @@ namespace kizuna
         page_id_t root_page_id() const noexcept { return root_page_id_; }
 
         RowLocation insert(const std::vector<uint8_t> &payload);
+        RowLocation update(const RowLocation &loc, const std::vector<uint8_t> &payload);
         bool erase(const RowLocation &loc);
         bool read(const RowLocation &loc, std::vector<uint8_t> &out) const;
         void truncate();
+
+        template <typename Fn>
+        void scan(Fn &&fn);
 
         Iterator begin();
         Iterator end();
@@ -84,5 +88,13 @@ namespace kizuna
             friend class TableHeap;
         };
     };
-}
 
+    template <typename Fn>
+    inline void TableHeap::scan(Fn &&fn)
+    {
+        for (auto it = begin(); it != end(); ++it)
+        {
+            fn(it.location(), it.payload());
+        }
+    }
+}

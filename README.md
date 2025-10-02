@@ -1,17 +1,17 @@
-# Kizuna (V0.3)
+# Kizuna (V0.4)
 
-Kizuna is a lightweight, teaching-focused DBMS written in modern C++ (C++20). V0.3 layers catalogued SQL on top of the storage core delivered in V0.1, adds SQL DDL support from V0.2, and now introduces the first slice of SQL DML (INSERT / SELECT / DELETE / TRUNCATE) with a friendlier REPL experience.
+Kizuna is a lightweight, teaching-focused DBMS written in modern C++ (C++20). V0.4 builds on the storage and catalog layers (V0.1/V0.2) with a predicate-aware SQL DML pipeline: projected SELECTs with WHERE/LIMIT, UPDATE expressions, filtered DELETE, and a REPL that mirrors row counts and projections.
 
 ## Feature Highlights
 
 - **Storage Core (V0.1)**: fixed-size paged file manager, slotted data pages, buffer pool with LRU, SQLite-style freelist trunks, typed record encode/decode, structured exceptions, logger, and REPL scaffolding.
 - **Catalog & DDL (V0.2)**: persistent table/column catalog, SQL lexer/parser for CREATE/DROP TABLE, DDL executor wiring, REPL schema inspection and DROP IF EXISTS UX.
-- **SQL DML (V0.3)**:
-  - Table heap over chained storage pages with tombstones and truncate support.
-  - AST + parser for INSERT, SELECT (full table scan), DELETE (table-wide), TRUNCATE.
-  - DML executor enforcing column order, type/null checks, and simple row materialisation.
-  - REPL commands `show tables` / `schema <table>` plus SELECT output aligned like catalog listings.
-  - Expanded unit tests covering parser, storage, engine, and REPL plumbing.
+- **SQL DML (V0.4)**:
+  - Expression-aware parser for projection lists, WHERE comparisons/logicals, UPDATE assignments, and LIMIT clauses.
+  - DML executor with predicate pushdown, projection materialisation, typed UPDATE/DELETE, and LIMIT enforcement.
+  - Table heap update API that reuses slots when possible and relocates safely when payloads grow.
+  - REPL SELECT output that mirrors projection headers and reports row counts for SELECT/UPDATE/DELETE.
+  - Expanded unit tests covering expression evaluation, predicate semantics (NULL/tri-state), LIMIT edge cases, and update relocation.
 
 ## Build
 
@@ -37,13 +37,15 @@ See `docs/DEMO.md` for an end-to-end walkthrough that exercises the SQL pipeline
 ## SQL Quick Reference
 
 ```
-CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(32) NOT NULL);
+CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(32) NOT NULL, active BOOLEAN, nickname VARCHAR(32));
 DROP TABLE [IF EXISTS] users;
-INSERT INTO users (id, name) VALUES (1, 'miku');
-SELECT * FROM users;
-DELETE FROM users;        -- clears all rows (no WHERE yet)
-TRUNCATE TABLE users;     -- wipes table heap fast
+INSERT INTO users (id, name, active, nickname) VALUES (1, 'miku', TRUE, 'diva');
+SELECT name, active FROM users WHERE active LIMIT 5;
+UPDATE users SET nickname = NULL WHERE id = 1;
+DELETE FROM users WHERE active = FALSE;
+TRUNCATE TABLE users;
 ```
+
 
 Additional REPL helpers:
 
@@ -64,3 +66,4 @@ Additional REPL helpers:
 
 - Page 1 remains reserved for metadata; user pages start from 2.
 - No WAL/concurrency yet future versions will build on this foundation.
+

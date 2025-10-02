@@ -30,6 +30,7 @@ set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 add_library(kizuna_common STATIC
     ${SOURCE_DIR}/common/exception.cpp
     ${SOURCE_DIR}/common/logger.cpp
+    ${SOURCE_DIR}/common/value.cpp
     ${SOURCE_DIR}/storage/file_manager.cpp
     ${SOURCE_DIR}/storage/page_manager.cpp
     ${SOURCE_DIR}/storage/record.cpp
@@ -41,6 +42,7 @@ add_library(kizuna_common STATIC
     ${SOURCE_DIR}/sql/dml_parser.cpp
     ${SOURCE_DIR}/engine/ddl_executor.cpp
     ${SOURCE_DIR}/engine/dml_executor.cpp
+    ${SOURCE_DIR}/engine/expression_evaluator.cpp
 )
 
 # Public headers live under src
@@ -63,6 +65,7 @@ add_executable(run_tests
     ${TEST_DIR}/test_main.cpp
     ${TEST_DIR}/exception_test.cpp
     ${TEST_DIR}/logger_test.cpp
+    ${TEST_DIR}/value_test.cpp
     ${TEST_DIR}/file_manager_test.cpp
     ${TEST_DIR}/file_manager_edge.cpp
     ${TEST_DIR}/page_test.cpp
@@ -72,6 +75,7 @@ add_executable(run_tests
     ${TEST_DIR}/storage/table_heap_test.cpp
     ${TEST_DIR}/sql/dml_parser_test.cpp
     ${TEST_DIR}/engine/dml_executor_test.cpp
+    ${TEST_DIR}/engine/expression_evaluator_test.cpp
     ${TEST_DIR}/sql/ddl_parser_test.cpp
     ${TEST_DIR}/catalog/catalog_manager_test.cpp
 )
@@ -83,6 +87,11 @@ add_custom_target(test
     DEPENDS run_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+
+
+
+
 
 
 

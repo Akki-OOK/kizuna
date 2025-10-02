@@ -14,12 +14,14 @@ bool file_manager_edge_tests();
 bool page_tests();
 bool page_manager_tests();
 bool record_tests();
+bool value_tests();
 bool page_manager_freelist_tests();
 bool table_heap_tests();
 bool sql_dml_parser_tests();
 bool sql_ddl_parser_tests();
 bool catalog_manager_ddl_tests();
 bool dml_executor_tests();
+bool expression_evaluator_tests();
 
 int main()
 {
@@ -30,11 +32,13 @@ int main()
         {"file_manager_edge_tests", &file_manager_edge_tests},
         {"page_tests", &page_tests},
         {"record_tests", &record_tests},
+        {"value_tests", &value_tests},
         {"page_manager_tests", &page_manager_tests},
         {"page_manager_freelist_tests", &page_manager_freelist_tests},
         {"table_heap_tests", &table_heap_tests},
         {"sql_dml_parser_tests", &sql_dml_parser_tests},
         {"sql_ddl_parser_tests", &sql_ddl_parser_tests},
+        {"expression_evaluator_tests", &expression_evaluator_tests},
         {"dml_executor_tests", &dml_executor_tests},
         {"catalog_manager_ddl_tests", &catalog_manager_ddl_tests},
     };
@@ -63,6 +67,8 @@ int main()
     std::cout << (failures == 0 ? "ALL TESTS PASSED" : "SOME TESTS FAILED") << "\n";
     return failures == 0 ? 0 : 1;
 }
+
+
 
 
 

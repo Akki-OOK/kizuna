@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <string_view>
 
 namespace kizuna::record
 {
@@ -100,6 +101,15 @@ namespace kizuna::record
         f.type = DataType::VARCHAR;
         f.is_null = false;
         f.payload.insert(f.payload.end(), s.begin(), s.end());
+        return f;
+    }
+
+    Field from_date(std::int64_t days_since_epoch)
+    {
+        Field f;
+        f.type = DataType::DATE;
+        f.is_null = false;
+        append_pod(f.payload, days_since_epoch);
         return f;
     }
 
@@ -236,4 +246,5 @@ namespace kizuna::record
         return p == end;
     }
 }
+
 

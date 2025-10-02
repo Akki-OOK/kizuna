@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -8,6 +10,10 @@
 
 namespace kizuna::sql
 {
+    // ------------------------------------------------------------------
+    // DDL (existing definitions)
+    // ------------------------------------------------------------------
+
     enum class StatementKind
     {
         CREATE_TABLE,
@@ -44,6 +50,10 @@ namespace kizuna::sql
         bool cascade{false};
     };
 
+    // ------------------------------------------------------------------
+    // Literals shared between DDL & DML
+    // ------------------------------------------------------------------
+
     enum class LiteralKind
     {
         NULL_LITERAL,
@@ -66,6 +76,74 @@ namespace kizuna::sql
         static LiteralValue string(std::string value);
     };
 
+    // ------------------------------------------------------------------
+    // DML expression tree
+    // ------------------------------------------------------------------
+
+    struct ColumnRef
+    {
+        std::string table;
+        std::string column;
+
+        bool has_table() const noexcept { return !table.empty(); }
+    };
+
+    enum class ExpressionKind
+    {
+        LITERAL,
+        COLUMN_REF,
+        UNARY,
+        BINARY,
+        NULL_TEST
+    };
+
+    enum class BinaryOperator
+    {
+        EQUAL,
+        NOT_EQUAL,
+        LESS,
+        LESS_EQUAL,
+        GREATER,
+        GREATER_EQUAL,
+        AND,
+        OR
+    };
+
+    enum class UnaryOperator
+    {
+        NOT
+    };
+
+    struct Expression
+    {
+        ExpressionKind kind{ExpressionKind::LITERAL};
+        LiteralValue literal{};
+        ColumnRef column{};
+        UnaryOperator unary_op{UnaryOperator::NOT};
+        BinaryOperator binary_op{BinaryOperator::EQUAL};
+        bool is_not_null{false};
+
+        std::unique_ptr<Expression> left;
+        std::unique_ptr<Expression> right;
+
+        static std::unique_ptr<Expression> make_literal(LiteralValue literal);
+        static std::unique_ptr<Expression> make_column(ColumnRef column);
+        static std::unique_ptr<Expression> make_unary(UnaryOperator op, std::unique_ptr<Expression> operand);
+        static std::unique_ptr<Expression> make_binary(BinaryOperator op,
+                                                       std::unique_ptr<Expression> left,
+                                                       std::unique_ptr<Expression> right);
+        static std::unique_ptr<Expression> make_null_check(std::unique_ptr<Expression> operand, bool is_not);
+    };
+
+    struct SelectItem
+    {
+        bool is_star{false};
+        ColumnRef column{};
+
+        static SelectItem star();
+        static SelectItem column_item(ColumnRef column);
+    };
+
     struct InsertRow
     {
         std::vector<LiteralValue> values;
@@ -81,11 +159,15 @@ namespace kizuna::sql
     struct SelectStatement
     {
         std::string table_name;
+        std::vector<SelectItem> columns; // empty -> treated as '*'
+        std::unique_ptr<Expression> where;
+        std::optional<std::int64_t> limit;
     };
 
     struct DeleteStatement
     {
         std::string table_name;
+        std::unique_ptr<Expression> where;
     };
 
     struct TruncateStatement
@@ -93,11 +175,25 @@ namespace kizuna::sql
         std::string table_name;
     };
 
+    struct UpdateAssignment
+    {
+        std::string column_name;
+        std::unique_ptr<Expression> value;
+    };
+
+    struct UpdateStatement
+    {
+        std::string table_name;
+        std::vector<UpdateAssignment> assignments;
+        std::unique_ptr<Expression> where;
+    };
+
     enum class DMLStatementKind
     {
         INSERT,
         SELECT,
         DELETE,
+        UPDATE,
         TRUNCATE
     };
 
@@ -107,6 +203,7 @@ namespace kizuna::sql
         InsertStatement insert;
         SelectStatement select;
         DeleteStatement del;
+        UpdateStatement update;
         TruncateStatement truncate;
     };
 }

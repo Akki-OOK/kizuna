@@ -1,15 +1,16 @@
-﻿Kizuna - Developer Notes (V0.3)
+﻿Kizuna - Developer Notes (V0.4 WIP)
 
 Overview
-- Storage-first teaching database that now covers catalogued SQL DDL (V0.2) and basic SQL DML (V0.3).
+- Storage-first teaching database covering catalogued SQL DDL (V0.2) and richer SQL DML (V0.4 predicates, UPDATE/DELETE with WHERE, LIMIT).
 - Pipeline: SQL text -> lexer/parser -> AST -> engine executor -> catalog + storage (TableHeap + PageManager).
-- Focus areas this sprint: record format with null bitmap, chained heap pages, DML executor, REPL ergonomics.
+- Focus areas this cycle: expression evaluation, predicate-aware DML executor, REPL ergonomics, and storage update mechanics.
 
 Modules
 - common/config.h: Tunables (page size, directories, version toggles) plus helper funcs.
 - common/types.h: Shared enums, ids, and SQL value helpers (see LiteralValue for DML binding).
 - common/exception.h/.cpp: StatusCode taxonomy + DBException/QueryException wrappers that carry source location.
 - common/logger.h/.cpp: Lightweight singleton logger with level control and rotating file sink.
+- common/value.h/.cpp: Variant Value abstraction with tri-state logic, numeric/date coercions, and formatting helpers.
 - storage/file_manager.h/.cpp: Backing file I/O and page allocation (1-based ids, freelist trunk layout).
 - storage/page.h: Slotted page header, null-aware slots, tombstone flags, next-page pointer for heap chaining.
 - storage/record.h/.cpp: Encode/decode routines that honor column metadata, null bitmap, and boolean literals.
@@ -20,14 +21,15 @@ Modules
 - sql/ast.h: AST nodes for both DDL and DML (CreateTable, DropTable, InsertStmt, SelectStmt, DeleteStmt, TruncateStmt).
 - sql/ddl_parser.h/.cpp & sql/dml_parser.h/.cpp: Hand-written recursive-descent parsers with friendlier error text.
 - engine/ddl_executor.h/.cpp: Bind DDL ASTs into catalog mutations and storage allocations, with constraint enforcement.
-- engine/dml_executor.h/.cpp: Execute INSERT/SELECT/DELETE/TRUNCATE via TableHeap, type checking, and row materialisation.
+- engine/dml_executor.h/.cpp: Execute INSERT/SELECT/DELETE/UPDATE/TRUNCATE with projection, predicate pushdown, LIMIT enforcement, and TableHeap updates.
+- engine/expression_evaluator.h/.cpp: Evaluate expression AST nodes with tri-valued logic, type coercion, and column bindings for WHERE/SET clauses.
 - cli/repl.h/.cpp: Command handlers (status/show/schema) plus SQL dispatcher that routes DDL/DML and prints results.
 
 Testing
 - Configure: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 - Build: cmake --build build --config Debug -- /m
 - Run: build\Debug\run_tests.exe (or ./build/run_tests on POSIX)
-- Suites cover: record encode/decode, page manager freelist, table heap insert/delete/truncate, SQL parser errors, DML executor flows.
+- Suites cover: record encode/decode, page manager freelist, table heap insert/delete/update, SQL parser + expression evaluator cases, predicate-aware DML executor flows.
 - Tests write under ./temp/; safe to purge between runs.
 
 Change Log (append new bullets as we iterate)
@@ -45,6 +47,13 @@ Change Log (append new bullets as we iterate)
 - Added: SQL DML parser for INSERT/SELECT/DELETE/TRUNCATE (V0.3 Step 3).
 - Added: DML executor + REPL integration + row printing (V0.3 Step 4 & 5).
 - Added: Storage, SQL, and engine unit tests for V0.3 features; hooked into run_tests target (V0.3 Step 6).
+- Added: Value/date extensions with tri-valued logic and record encoding updates (V0.4 Step 1).
+- Added: Expression AST + parser support for WHERE/LIMIT/UPDATE assignments (V0.4 Step 2).
+- Added: Expression evaluator engine with typed coercions and tri-bool logic (V0.4 Step 3).
+- Added: TableHeap update path with relocate-or-reuse semantics and iterator scan helper (V0.4 Step 4).
+- Added: DML executor predicate pushdown, projections, LIMIT, and typed UPDATE flow (V0.4 Step 5).
+- Added: REPL DML UX refresh with projection-aware printing and row-count summaries (V0.4 Step 6).
+- Added: Extended parser/expression/dml tests plus README/DEMO updates (V0.4 Step 7).
 
 Troubleshooting Log (Issues & Fixes)
 - IntelliSense C++20 mismatch: set IDE standard to C++20 to match CMake flags.
@@ -64,7 +73,8 @@ Test Enhancements (Edge Cases)
 - Record roundtrip: mix types, nulls, and bool literal text.
 - TableHeap: insert across multiple pages, delete some rows, reinsert to reuse tombstones.
 - SQL parsers: cover happy path + malformed tokens for DDL and DML.
-- DML executor: insert/select/delete/truncate all rows through catalog + storage.
+- Expression evaluator: tri-valued AND/OR/NOT, NULL comparisons, and DATE predicates.
+- DML executor: projection + WHERE/LIMIT paths for SELECT/DELETE/UPDATE, including VARCHAR growth cases.
 
 Demo Script
 - Walkthrough lives in docs/DEMO.md; shows new DML flow (INSERT -> SELECT -> DELETE/TRUNCATE) plus legacy storage ops.

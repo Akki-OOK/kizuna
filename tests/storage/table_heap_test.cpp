@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <string_view>
 #include <cstring>
 
 #include "storage/table_heap.h"
@@ -45,12 +46,30 @@ namespace
         }
     };
 
-    std::vector<uint8_t> make_payload(int value)
+    std::vector<uint8_t> make_payload_with_label(int value, std::string_view label)
     {
         std::vector<record::Field> fields;
         fields.push_back(record::from_int32(value));
-        fields.push_back(record::from_string("val" + std::to_string(value)));
+        fields.push_back(record::from_string(label));
         return record::encode(fields);
+    }
+
+
+    std::vector<uint8_t> make_payload(int value)
+    {
+        return make_payload_with_label(value, "val" + std::to_string(value));
+    }
+
+    bool decode_payload(const std::vector<uint8_t> &payload, int &out_int, std::string &out_str)
+    {
+        std::vector<record::Field> fields;
+        if (!record::decode(payload.data(), payload.size(), fields))
+            return false;
+        if (fields.size() < 2) return false;
+        if (fields[0].payload.size() != 4) return false;
+        std::memcpy(&out_int, fields[0].payload.data(), 4);
+        out_str.assign(reinterpret_cast<const char *>(fields[1].payload.data()), fields[1].payload.size());
+        return true;
     }
 
     bool decode_int(const std::vector<uint8_t> &payload, int &out)
@@ -183,9 +202,78 @@ namespace
         if (loc.page_id != root) return false;
         return true;
     }
+
+    bool update_in_place_success()
+    {
+        TestContext ctx("table_heap_update_same");
+        page_id_t root = ctx.pm->new_page(PageType::DATA);
+        ctx.pm->unpin(root, false);
+
+        TableHeap heap(*ctx.pm, root);
+        auto original = heap.insert(make_payload_with_label(10, "same"));
+
+        auto updated = heap.update(original, make_payload_with_label(42, "diff"));
+        if (!(updated == original)) return false;
+
+        std::vector<uint8_t> out;
+        if (!heap.read(updated, out)) return false;
+        int value = 0;
+        std::string text;
+        if (!decode_payload(out, value, text)) return false;
+        if (value != 42 || text != "diff") return false;
+        return true;
+    }
+
+    bool update_relocates_to_new_slot()
+    {
+        TestContext ctx("table_heap_update_grow");
+        page_id_t root = ctx.pm->new_page(PageType::DATA);
+        ctx.pm->unpin(root, false);
+
+        TableHeap heap(*ctx.pm, root);
+        auto original = heap.insert(make_payload_with_label(5, "tiny"));
+
+        auto updated = heap.update(original, make_payload_with_label(6, "this string is definitely longer"));
+        if (updated == original) return false;
+
+        std::vector<uint8_t> out;
+        if (!heap.read(updated, out)) return false;
+        int value = 0;
+        std::string text;
+        if (!decode_payload(out, value, text)) return false;
+        if (value != 6 || text != "this string is definitely longer") return false;
+
+        std::vector<uint8_t> old_payload;
+        if (heap.read(original, old_payload)) return false;
+        return true;
+    }
+
+    bool scan_helper_visits_all_rows()
+    {
+        TestContext ctx("table_heap_scan_helper");
+        page_id_t root = ctx.pm->new_page(PageType::DATA);
+        ctx.pm->unpin(root, false);
+
+        TableHeap heap(*ctx.pm, root);
+        heap.insert(make_payload(1));
+        heap.insert(make_payload(2));
+        heap.insert(make_payload(3));
+
+        std::vector<int> seen;
+        heap.scan([&](const TableHeap::RowLocation &, const std::vector<uint8_t> &payload) {
+            int v = 0;
+            if (decode_int(payload, v))
+            {
+                seen.push_back(v);
+            }
+        });
+
+        return seen == std::vector<int>{1, 2, 3};
+    }
 }
 
 bool table_heap_tests()
 {
-    return basic_insert_scan() && overflow_insert() && erase_skip() && truncate_resets();
+    return basic_insert_scan() && overflow_insert() && erase_skip() && truncate_resets() &&
+           update_in_place_success() && update_relocates_to_new_slot() && scan_helper_visits_all_rows();
 }

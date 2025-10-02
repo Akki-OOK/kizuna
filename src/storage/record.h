@@ -25,6 +25,7 @@ namespace kizuna::record
     Field from_int64(std::int64_t v);
     Field from_double(double v);
     Field from_string(std::string_view s);
+    Field from_date(std::int64_t days_since_epoch);
     Field from_blob(const std::vector<std::uint8_t> &b);
 
     std::vector<std::uint8_t> encode(const std::vector<Field> &fields);

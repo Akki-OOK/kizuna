@@ -87,11 +87,16 @@ namespace kizuna
                   << "\nSQL DDL (V0.2):\n"
                   << "  CREATE TABLE <name>(...) [;]     - add a table to the catalog (INT, FLOAT, VARCHAR(n))\n"
                   << "  DROP TABLE [IF EXISTS] <name> [;]- drop table metadata and storage\n"
-                  << "\nSQL DML (V0.3):\n"
-                  << "  INSERT INTO <table> VALUES (...); - insert new rows\n"
-                  << "  SELECT * FROM <table>;            - list every row\n"
-                  << "  DELETE FROM <table>;              - delete all rows (no WHERE yet)\n"
-                  << "  TRUNCATE TABLE <table>;           - wipe the table fast\n";
+                  << "\nSQL DML (V0.3 baseline):\n"
+                  << "  INSERT INTO <table> VALUES (...);                 - append rows\n"
+                  << "  SELECT * FROM <table>;                            - scan entire table\n"
+                  << "  DELETE FROM <table>;                              - delete all rows\n"
+                  << "  TRUNCATE TABLE <table>;                            - wipe the table fast\n"
+                  << "\nSQL DML (V0.4 additions):\n"
+                  << "  INSERT INTO <table> [(col,...)] VALUES (...);      - column-targeted inserts\n"
+                  << "  SELECT col[, ...] FROM <table> [WHERE ...] [LIMIT n]; - projection + filtering\n"
+                  << "  UPDATE <table> SET col = expr[, ...] [WHERE ...];    - edit rows in place\n"
+                  << "  DELETE FROM <table> [WHERE ...];                   - remove matching rows\n";
     }
 
     std::vector<std::string> Repl::tokenize(const std::string &line)
@@ -137,7 +142,7 @@ namespace kizuna
 
     int Repl::run()
     {
-        std::cout << "Kizuna REPL (V0.3) - type 'help'\n";
+        std::cout << "Kizuna REPL (V0.4) - type 'help'\n";
         Logger::instance().info("Starting REPL");
 
         try
@@ -607,7 +612,7 @@ namespace kizuna
 
         auto is_dml_keyword = [&](const std::string &kw)
         {
-            return kw == "INSERT" || kw == "SELECT" || kw == "DELETE" || kw == "TRUNCATE";
+            return kw == "INSERT" || kw == "SELECT" || kw == "DELETE" || kw == "UPDATE" || kw == "TRUNCATE";
         };
 
         try
@@ -623,25 +628,27 @@ namespace kizuna
                 if (upper == "SELECT")
                 {
                     auto stmt = sql::parse_select(trimmed);
-                    auto rows = dml_executor_->select_all(stmt);
-                    auto table_opt = catalog_->get_table(stmt.table_name);
-                    std::vector<catalog::ColumnCatalogEntry> columns;
-                    if (table_opt)
-                        columns = catalog_->get_columns(table_opt->table_id);
-                    if (!columns.empty())
+                    auto result = dml_executor_->select(stmt);
+
+                    if (result.column_names.empty())
+                    {
+                        std::cout << "(no columns)\n";
+                    }
+                    else
                     {
                         std::cout << "Columns:";
-                        for (const auto &col : columns)
-                            std::cout << ' ' << col.column.name;
+                        for (const auto &name : result.column_names)
+                            std::cout << ' ' << name;
                         std::cout << "\n";
                     }
-                    if (rows.empty())
+
+                    if (result.rows.empty())
                     {
                         std::cout << "(no rows)\n";
                     }
                     else
                     {
-                        for (const auto &row : rows)
+                        for (const auto &row : result.rows)
                         {
                             std::cout << "  ";
                             for (std::size_t i = 0; i < row.size(); ++i)
@@ -653,7 +660,20 @@ namespace kizuna
                             std::cout << "\n";
                         }
                     }
-                    std::cout << rows.size() << " row(s).\n";
+
+                    std::cout << "[rows=" << result.rows.size() << "]\n";
+                }
+                else if (upper == "DELETE")
+                {
+                    auto stmt = sql::parse_delete(trimmed);
+                    auto result = dml_executor_->delete_all(stmt);
+                    std::cout << "[rows=" << result.rows_deleted << "] deleted\n";
+                }
+                else if (upper == "UPDATE")
+                {
+                    auto stmt = sql::parse_update(trimmed);
+                    auto result = dml_executor_->update_all(stmt);
+                    std::cout << "[rows=" << result.rows_updated << "] updated\n";
                 }
                 else
                 {

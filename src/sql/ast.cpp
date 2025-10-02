@@ -55,4 +55,66 @@ namespace kizuna::sql
         lit.text = std::move(value);
         return lit;
     }
+
+    std::unique_ptr<Expression> Expression::make_literal(LiteralValue literal)
+    {
+        auto expr = std::make_unique<Expression>();
+        expr->kind = ExpressionKind::LITERAL;
+        expr->literal = std::move(literal);
+        return expr;
+    }
+
+    std::unique_ptr<Expression> Expression::make_column(ColumnRef column)
+    {
+        auto expr = std::make_unique<Expression>();
+        expr->kind = ExpressionKind::COLUMN_REF;
+        expr->column = std::move(column);
+        return expr;
+    }
+
+    std::unique_ptr<Expression> Expression::make_unary(UnaryOperator op, std::unique_ptr<Expression> operand)
+
+    {
+        auto expr = std::make_unique<Expression>();
+        expr->kind = ExpressionKind::UNARY;
+        expr->unary_op = op;
+        expr->left = std::move(operand);
+        return expr;
+    }
+
+    std::unique_ptr<Expression> Expression::make_binary(BinaryOperator op,
+                                                       std::unique_ptr<Expression> left,
+                                                       std::unique_ptr<Expression> right)
+    {
+        auto expr = std::make_unique<Expression>();
+        expr->kind = ExpressionKind::BINARY;
+        expr->binary_op = op;
+        expr->left = std::move(left);
+        expr->right = std::move(right);
+        return expr;
+    }
+
+    std::unique_ptr<Expression> Expression::make_null_check(std::unique_ptr<Expression> operand, bool is_not)
+    {
+        auto expr = std::make_unique<Expression>();
+        expr->kind = ExpressionKind::NULL_TEST;
+        expr->is_not_null = is_not;
+        expr->left = std::move(operand);
+        return expr;
+    }
+
+    SelectItem SelectItem::star()
+    {
+        SelectItem item;
+        item.is_star = true;
+        return item;
+    }
+
+    SelectItem SelectItem::column_item(ColumnRef column)
+    {
+        SelectItem item;
+        item.is_star = false;
+        item.column = std::move(column);
+        return item;
+    }
 }

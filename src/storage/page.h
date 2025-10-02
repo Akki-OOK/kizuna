@@ -210,8 +210,42 @@ namespace kizuna
             header().record_count -= 1;
             return true;
         }
+        bool update(slot_id_t slot, const uint8_t *payload, uint16_t len)
+        {
+            auto &h = header();
+            auto type = static_cast<PageType>(h.page_type);
+            if (type == PageType::INVALID)
+            {
+                h.page_type = static_cast<uint8_t>(PageType::DATA);
+                type = PageType::DATA;
+            }
+            if (type != PageType::DATA)
+            {
+                KIZUNA_THROW_STORAGE(StatusCode::INVALID_PAGE_TYPE,
+                                      "Update on non-DATA page",
+                                      std::to_string(h.page_id));
+            }
+            if (slot >= h.slot_count) return false;
+            uint8_t *base = data();
+            const size_t slot_pos = page_size() - ((static_cast<size_t>(slot) + 1) * slot_size());
+            uint16_t record_off = 0;
+            std::memcpy(&record_off, base + slot_pos, sizeof(record_off));
+            if (record_off == 0xFFFF) return false;
+            const uint16_t current_len = static_cast<uint16_t>(base[record_off]) | (static_cast<uint16_t>(base[record_off + 1]) << 8);
+            if (len > current_len)
+                return false;
+            base[record_off + 0] = static_cast<uint8_t>(len & 0xFF);
+            base[record_off + 1] = static_cast<uint8_t>((len >> 8) & 0xFF);
+            std::memcpy(base + record_off + 2, payload, len);
+            if (current_len > len)
+            {
+                std::memset(base + record_off + 2 + len, 0, current_len - len);
+            }
+            return true;
+        }
 
     private:
         std::array<uint8_t, config::PAGE_SIZE> storage_{};
     };
 }
+

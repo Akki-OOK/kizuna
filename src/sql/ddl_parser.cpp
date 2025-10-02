@@ -358,6 +358,10 @@ namespace kizuna::sql
                     consume();
                     expect_symbol(')');
                 }
+                else if (type_upper == "DATE")
+                {
+                    column.type = DataType::DATE;
+                }
                 else
                 {
                     throw QueryException::unsupported_type(type_token.text);
