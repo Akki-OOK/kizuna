@@ -45,21 +45,18 @@ See `docs/DEMO.md` for an end-to-end walkthrough that exercises the SQL pipeline
 
 **DDL**
 
-- Create an 'employees' table to store user information
-  `CREATE TABLE employees ( employee_id INT PRIMARY KEY, full_name VARCHAR(64) NOT NULL, email VARCHAR(64) UNIQUE NOT NULL, department VARCHAR(32), is_active BOOLEAN DEFAULT TRUE );`
+- `CREATE TABLE employees ( employee_id INT PRIMARY KEY, full_name VARCHAR(64) NOT NULL, email VARCHAR(64) UNIQUE NOT NULL, department VARCHAR(32), is_active BOOLEAN DEFAULT TRUE );`
+- `DROP TABLE [IF EXISTS] employees;`
 
-- Drop the table if it exists
-  `DROP TABLE [IF EXISTS] employees;`
-  **DML**
+**DML**
 
 - `INSERT INTO employees (employee_id, full_name, email, department, is_active) VALUES (1001, 'Alice Johnson', 'alice.johnson@acme.com', 'Engineering', TRUE);`
-
 - `SELECT full_name, is_active FROM employees WHERE is_active = TRUE LIMIT 5;`
-
 - `UPDATE employees SET department = 'Research & Development' WHERE employee_id = 1001;`
 - `DELETE FROM employees WHERE is_active = FALSE;`
 - `TRUNCATE TABLE employees;`
-  **Indexing & Ordering**
+
+**Indexing & Ordering**
 
 - `CREATE INDEX idx_users_name ON users(name);`
 - `DROP INDEX IF EXISTS idx_users_name;`
