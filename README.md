@@ -43,25 +43,29 @@ See `docs/DEMO.md` for an end-to-end walkthrough that exercises the SQL pipeline
 
 ## SQL Quick Reference
 
-```
-CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(32) NOT NULL, active BOOLEAN, nickname VARCHAR(32));
-DROP TABLE [IF EXISTS] users;
-INSERT INTO users (id, name, active, nickname) VALUES (1, 'miku', TRUE, 'diva');
-SELECT name, active FROM users WHERE active LIMIT 5;
-UPDATE users SET nickname = NULL WHERE id = 1;
-DELETE FROM users WHERE active = FALSE;
-TRUNCATE TABLE users;
-CREATE INDEX idx_users_name ON users(name);
-DROP INDEX IF EXISTS idx_users_name;
-SELECT id, name FROM users WHERE name = 'miku' ORDER BY id DESC LIMIT 3;
-```
+**DDL**
 
+- Create an 'employees' table to store user information
+  `CREATE TABLE employees ( employee_id INT PRIMARY KEY, full_name VARCHAR(64) NOT NULL, email VARCHAR(64) UNIQUE NOT NULL, department VARCHAR(32), is_active BOOLEAN DEFAULT TRUE );`
 
-Additional REPL helpers:
+- Drop the table if it exists
+  `DROP TABLE [IF EXISTS] employees;`
+  **DML**
 
-- `show tables`
-- `schema <table>`
-- `loglevel <level>`
+- `INSERT INTO employees (employee_id, full_name, email, department, is_active) VALUES (1001, 'Alice Johnson', 'alice.johnson@acme.com', 'Engineering', TRUE);`
+
+- `SELECT full_name, is_active FROM employees WHERE is_active = TRUE LIMIT 5;`
+
+- `UPDATE employees SET department = 'Research & Development' WHERE employee_id = 1001;`
+- `DELETE FROM employees WHERE is_active = FALSE;`
+- `TRUNCATE TABLE employees;`
+  **Indexing & Ordering**
+
+- `CREATE INDEX idx_users_name ON users(name);`
+- `DROP INDEX IF EXISTS idx_users_name;`
+- `SELECT id, name FROM users WHERE name = 'Alice Johnson' ORDER BY id DESC LIMIT 3;`
+
+Additional REPL helpers: `show tables`, `schema <table>`, `loglevel <level>`
 
 ## Project Layout
 
@@ -76,7 +80,7 @@ Additional REPL helpers:
 
 ## Notes
 
-- Page 1 remains reserved for metadata; user pages start from 2.
-- Page 1 remains the metadata root; free pages are tracked in a linked freelist.
-- Indexes currently support equality and range scans on single-column keys; ORDER BY uses indexes when possible and sorts in-memory otherwise.
-- No WAL/concurrency yet—future versions will build on this foundation.
+- All runtime assets are created beside the executable under `database/` (catalog, data, indexes, logs, temp, backup).
+- Page 1 is reserved for catalog metadata; data pages start at ID 2 and the freelist uses SQLite-style trunks.
+- Indexes currently support equality and range scans on single-column keys; ORDER BY reuses matching indexes or falls back to a stable in-memory sort.
+- No WAL/concurrency yet�future releases will build on this foundation.
