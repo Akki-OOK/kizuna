@@ -1,11 +1,13 @@
 Kizuna - Developer Notes (V0.5 WIP)
 
 Overview
-- Storage-first teaching database covering catalogued SQL DDL (V0.2) and richer SQL DML (V0.4 predicates, UPDATE/DELETE with WHERE, LIMIT).
+
+- Storage-first teaching database covering catalogued SQL DDL (V0.2), richer SQL DML (V0.4 predicates/UPDATE/DELETE/LIMIT), and V0.5 secondary indexing + ORDER BY.
 - Pipeline: SQL text -> lexer/parser -> AST -> engine executor -> catalog + storage (TableHeap + PageManager).
 - Focus areas this cycle: expression evaluation, predicate-aware DML executor, REPL ergonomics, and storage update mechanics.
 
 Modules
+
 - common/config.h: Tunables (page size, directories, version toggles) plus helper funcs.
 - common/types.h: Shared enums, ids, and SQL value helpers (see LiteralValue for DML binding).
 - common/exception.h/.cpp: StatusCode taxonomy + DBException/QueryException wrappers that carry source location.
@@ -23,9 +25,10 @@ Modules
 - engine/ddl_executor.h/.cpp: Bind DDL/INDEX ASTs into catalog mutations and storage allocations, with constraint enforcement.
 - engine/dml_executor.h/.cpp: Execute INSERT/SELECT/DELETE/UPDATE/TRUNCATE with projection, predicate pushdown, LIMIT/ORDER BY enforcement, table heap updates, and index maintenance.
 - engine/expression_evaluator.h/.cpp: Evaluate expression AST nodes with tri-valued logic, type coercion, and column bindings for WHERE/SET/ORDER BY clauses.
-- cli/repl.h/.cpp: Command handlers (status/show/schema) plus SQL dispatcher that routes DDL/DML and prints results.
+- cli/repl.h/.cpp: Command handlers (status/show/schema) plus SQL dispatcher that routes DDL/DML, prints ordered SELECT results, and manages DB lifecycle.
 
 Testing
+
 - Configure: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 - Build: cmake --build build --config Debug -- /m
 - Run: build\Debug\run_tests.exe (or ./build/run_tests on POSIX)
@@ -33,14 +36,15 @@ Testing
 - Tests write under ./temp/; safe to purge between runs.
 
 Change Log (append new bullets as we iterate)
+
 - Added: exceptions implementation (src/common/exception.cpp).
-- Added: logger (src/common/logger.*) with console + file sinks.
-- Added: file manager (src/storage/file_manager.*) for paged I/O.
-- Added: page layout (src/storage/page.*) with slot directory and guard rails.
-- Added: page cache (src/storage/page_manager.*) with freelist trunking.
-- Added: record helpers (src/storage/record.*) covering INT/BIGINT/DOUBLE/BOOLEAN/VARCHAR.
-- Added: catalog schema + manager (src/catalog/*) persisting __tables__/__columns__.
-- Added: SQL AST + DDL executor path (src/sql/*, src/engine/ddl_executor.*) for CREATE/DROP TABLE.
+- Added: logger (src/common/logger.\*) with console + file sinks.
+- Added: file manager (src/storage/file_manager.\*) for paged I/O.
+- Added: page layout (src/storage/page.\*) with slot directory and guard rails.
+- Added: page cache (src/storage/page_manager.\*) with freelist trunking.
+- Added: record helpers (src/storage/record.\*) covering INT/BIGINT/DOUBLE/BOOLEAN/VARCHAR.
+- Added: catalog schema + manager (src/catalog/\*) persisting **tables**/**columns**.
+- Added: SQL AST + DDL executor path (src/sql/_, src/engine/ddl_executor._) for CREATE/DROP TABLE.
 - Added: REPL schema/show tables commands and nicer DROP IF EXISTS UX.
 - Added: Record format retrofit with null bitmap + heap page linkage (V0.3 Step 1).
 - Added: TableHeap abstraction that handles append, tombstone delete, and truncate with iterator (V0.3 Step 2).
@@ -53,13 +57,18 @@ Change Log (append new bullets as we iterate)
 - Added: TableHeap update path with relocate-or-reuse semantics and iterator scan helper (V0.4 Step 4).
 - Added: DML executor predicate pushdown, projections, LIMIT, and typed UPDATE flow (V0.4 Step 5).
 - Added: REPL DML UX refresh with projection-aware printing and row-count summaries (V0.4 Step 6).
-- Added: Extended parser/expression/dml tests plus README/DEMO updates (V0.4 Step 7).\r\n- Added: B+ tree index storage layer, index manager, and catalog metadata wiring (V0.5 Step 1-4).\r\n- Added: CREATE/DROP INDEX grammar + auto primary-key indexes in DDL executor (V0.5 Step 5-6).\r\n- Added: Index-maintained DML executor with equality/range scans and UPDATE support (V0.5 Step 7).\r\n- Added: SELECT ORDER BY parsing/execution with index-aware planning and fallback sorting plus updated REPL UX/docs/tests (V0.5 Step 8-9).
+- Added: Extended parser/expression/dml tests plus README/DEMO updates (V0.4 Step 7).
+- Added: B+ tree index storage layer, index manager, and catalog metadata wiring (V0.5 Step 1-4).
+- Added: CREATE/DROP INDEX grammar + auto primary-key indexes in DDL executor (V0.5 Step 5-6).
+- Added: Index-maintained DML executor with equality/range scans and UPDATE support (V0.5 Step 7).
+- Added: SELECT ORDER BY parsing/execution with index-aware planning and fallback sorting plus updated REPL UX/docs/tests (V0.5 Step 8-9).
 
 Troubleshooting Log (Issues & Fixes)
+
 - IntelliSense C++20 mismatch: set IDE standard to C++20 to match CMake flags.
 - MSVC /Wextra invalid: switch to /W4 on MSVC via generator expressions.
 - Slotted page overlap: fix by reserving slot space before writes and bounding by free_space_offset.
-- Disk offset bug (1-based ids): use (page_id - 1) * PAGE_SIZE.
+- Disk offset bug (1-based ids): use (page_id - 1) \* PAGE_SIZE.
 - Metadata misuse: guard REPL commands from writing to page 1.
 - Freelist scaling: trunk/leaf freelist like SQLite, stored in metadata + dedicated pages.
 - Post-free access: enforce page type checks before record ops.
@@ -67,6 +76,7 @@ Troubleshooting Log (Issues & Fixes)
 - Heap chain corruption: always set next_page_id and flush parent before allocating another page.
 
 Test Enhancements (Edge Cases)
+
 - Page capacity: fill until full; verify sum of slot lengths matches page usage.
 - File I/O edges: guard invalid reads/writes; ensure allocate increments count once.
 - Freelist persistence: trunk reuse validated after reopen.
@@ -77,8 +87,5 @@ Test Enhancements (Edge Cases)
 - DML executor: projection + WHERE/LIMIT paths for SELECT/DELETE/UPDATE, including VARCHAR growth cases.
 
 Demo Script
+
 - Walkthrough lives in docs/DEMO.md; shows new DML flow (INSERT -> SELECT -> DELETE/TRUNCATE) plus legacy storage ops.
-
-
-
-

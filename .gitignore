@@ -1,4 +1,4 @@
-# CMake build directories
+# local CMake build directories
 build*/
 out/
 bin/
@@ -41,9 +41,9 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 
-# Generated test binaries (if any)
+# Generated test binaries
 tests/*_test
 
-# Project-local docs you may not want to publish
+# Project-local docs
 kizuna-SRS.md
 docs/
