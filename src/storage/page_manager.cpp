@@ -318,9 +318,6 @@ namespace kizuna
             // Create metadata page at id 1
             const page_id_t meta_id = fm_.allocate_page(); // should be 1
             (void)meta_id;
-            Page meta;
-            meta.init(PageType::METADATA, config::FIRST_PAGE_ID);
-            fm_.write_page(config::FIRST_PAGE_ID, meta.data());
 
             // Allocate root pages for catalog tables/columns
             Page tables;
@@ -333,8 +330,15 @@ namespace kizuna
             columns.init(PageType::DATA, catalog_columns_root_);
             fm_.write_page(catalog_columns_root_, columns.data());
 
+            Page indexes;
+            catalog_indexes_root_ = fm_.allocate_page();
+            indexes.init(PageType::DATA, catalog_indexes_root_);
+            fm_.write_page(catalog_indexes_root_, indexes.data());
+
+
             first_trunk_id_ = 0;
             free_count_ = 0;
+            next_index_id_ = 1;
             next_table_id_ = 1;
             catalog_version_ = config::CATALOG_SCHEMA_VERSION;
             save_metadata();
@@ -363,22 +367,45 @@ namespace kizuna
             return;
         }
         catalog_version_ = version;
+        bool metadata_dirty = false;
         std::memcpy(&first_trunk_id_, b + off + 8, 4);
         std::memcpy(&free_count_, b + off + 12, 4);
-        if (catalog_version_ >= 2)
+        if (catalog_version_ >= 3)
+        {
+            std::memcpy(&catalog_tables_root_, b + off + 16, 4);
+            std::memcpy(&catalog_columns_root_, b + off + 20, 4);
+            std::memcpy(&catalog_indexes_root_, b + off + 24, 4);
+            uint32_t next_table_raw = 0;
+            std::memcpy(&next_table_raw, b + off + 28, 4);
+            uint32_t next_index_raw = 1;
+            std::memcpy(&next_index_raw, b + off + 32, 4);
+            next_table_id_ = static_cast<table_id_t>(next_table_raw);
+            next_index_id_ = static_cast<index_id_t>(next_index_raw);
+        }
+        else if (catalog_version_ >= 2)
         {
             std::memcpy(&catalog_tables_root_, b + off + 16, 4);
             std::memcpy(&catalog_columns_root_, b + off + 20, 4);
             uint32_t next_id_raw = 0;
             std::memcpy(&next_id_raw, b + off + 24, 4);
             next_table_id_ = static_cast<table_id_t>(next_id_raw);
+            catalog_indexes_root_ = 0;
+            next_index_id_ = 1;
+            metadata_dirty = true;
         }
         else
         {
             catalog_tables_root_ = 0;
             catalog_columns_root_ = 0;
+            catalog_indexes_root_ = 0;
             next_table_id_ = 1;
+            next_index_id_ = 1;
+            metadata_dirty = true;
+        }
+        if (catalog_version_ < config::CATALOG_SCHEMA_VERSION)
+        {
             catalog_version_ = config::CATALOG_SCHEMA_VERSION;
+            metadata_dirty = true;
         }
 
         if (catalog_tables_root_ == 0)
@@ -387,6 +414,7 @@ namespace kizuna
             catalog_tables_root_ = fm_.allocate_page();
             tables.init(PageType::DATA, catalog_tables_root_);
             fm_.write_page(catalog_tables_root_, tables.data());
+            metadata_dirty = true;
         }
         if (catalog_columns_root_ == 0)
         {
@@ -394,13 +422,28 @@ namespace kizuna
             catalog_columns_root_ = fm_.allocate_page();
             columns.init(PageType::DATA, catalog_columns_root_);
             fm_.write_page(catalog_columns_root_, columns.data());
+            metadata_dirty = true;
+        }
+        if (catalog_indexes_root_ == 0)
+        {
+            Page indexes;
+            catalog_indexes_root_ = fm_.allocate_page();
+            indexes.init(PageType::DATA, catalog_indexes_root_);
+            fm_.write_page(catalog_indexes_root_, indexes.data());
+            metadata_dirty = true;
         }
         if (next_table_id_ == 0)
         {
             next_table_id_ = 1;
+            metadata_dirty = true;
+        }
+        if (next_index_id_ == 0)
+        {
+            next_index_id_ = 1;
+            metadata_dirty = true;
         }
 
-        if (catalog_version_ != config::CATALOG_SCHEMA_VERSION)
+        if (metadata_dirty || catalog_version_ != config::CATALOG_SCHEMA_VERSION)
         {
             catalog_version_ = config::CATALOG_SCHEMA_VERSION;
             save_metadata();
@@ -421,11 +464,13 @@ namespace kizuna
         std::memcpy(b + off + 12, &free_count_, 4);
         std::memcpy(b + off + 16, &catalog_tables_root_, 4);
         std::memcpy(b + off + 20, &catalog_columns_root_, 4);
-        uint32_t next_id_raw = static_cast<uint32_t>(next_table_id_);
-        std::memcpy(b + off + 24, &next_id_raw, 4);
+        std::memcpy(b + off + 24, &catalog_indexes_root_, 4);
+        uint32_t next_table_raw = static_cast<uint32_t>(next_table_id_);
+        std::memcpy(b + off + 28, &next_table_raw, 4);
+        uint32_t next_index_raw = static_cast<uint32_t>(next_index_id_);
+        std::memcpy(b + off + 32, &next_index_raw, 4);
         fm_.write_page(config::FIRST_PAGE_ID, meta.data());
     }
-
     void PageManager::set_catalog_tables_root(page_id_t id)
     {
         catalog_tables_root_ = id;
@@ -435,6 +480,18 @@ namespace kizuna
     void PageManager::set_catalog_columns_root(page_id_t id)
     {
         catalog_columns_root_ = id;
+        save_metadata();
+    }
+
+    void PageManager::set_catalog_indexes_root(page_id_t id)
+    {
+        catalog_indexes_root_ = id;
+        save_metadata();
+    }
+
+    void PageManager::set_next_index_id(index_id_t id)
+    {
+        next_index_id_ = id;
         save_metadata();
     }
 
@@ -500,6 +557,13 @@ namespace kizuna
         return next;
     }
 }
+
+
+
+
+
+
+
 
 
 

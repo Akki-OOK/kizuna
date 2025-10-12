@@ -11,9 +11,9 @@ namespace fs = std::filesystem;
 
 bool page_manager_tests()
 {
-    const std::string db_path = std::string(config::TEMP_DIR) + "pm_test" + config::DB_FILE_EXTENSION;
+    const std::string db_path = (config::temp_dir() / (std::string("pm_test") + config::DB_FILE_EXTENSION)).string();
     std::error_code ec;
-    fs::create_directories(config::TEMP_DIR, ec);
+    fs::create_directories(config::temp_dir(), ec);
     fs::remove(db_path, ec);
 
     FileManager fm(db_path, true);

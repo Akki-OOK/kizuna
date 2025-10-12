@@ -77,6 +77,40 @@ static void check_update_parse()
     assert(update.where->kind == sql::ExpressionKind::BINARY);
 }
 
+static void check_select_order_by()
+{
+    auto select1 = sql::parse_select("SELECT id FROM users ORDER BY name;");
+    assert(select1.order_by.has_value());
+    assert(select1.order_by->ascending);
+    assert(select1.order_by->column.column == "name");
+    assert(!select1.limit.has_value());
+
+    auto select2 = sql::parse_select("SELECT id FROM users WHERE active ORDER BY created DESC LIMIT 10;");
+    assert(select2.order_by.has_value());
+    assert(!select2.order_by->ascending);
+    assert(select2.order_by->column.column == "created");
+    assert(select2.limit.has_value());
+    assert(*select2.limit == 10);
+}
+
+static void check_select_order_by_reject_multi()
+{
+    bool caught = false;
+    try
+    {
+        (void)sql::parse_select("SELECT id FROM users ORDER BY name, created;");
+    }
+    catch (const DBException &ex)
+    {
+        caught = (ex.code() == StatusCode::SYNTAX_ERROR);
+    }
+    catch (...)
+    {
+        caught = true;
+    }
+    assert(caught);
+}
+
 static void check_insert_variants()
 {
     auto insert = sql::parse_insert("INSERT INTO users (id, name, active) VALUES (1, 'alice', TRUE), (2, 'bob', FALSE);");
@@ -111,6 +145,8 @@ bool sql_dml_parser_tests()
     check_select_star();
     check_select_star_mixed();
     check_null_tests();
+    check_select_order_by();
+    check_select_order_by_reject_multi();
     check_delete_where();
     check_update_parse();
     check_truncate();

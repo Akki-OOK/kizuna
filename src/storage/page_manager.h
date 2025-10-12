@@ -37,9 +37,13 @@ namespace kizuna
         uint32_t catalog_version() const noexcept { return catalog_version_; }
         page_id_t catalog_tables_root() const noexcept { return catalog_tables_root_; }
         page_id_t catalog_columns_root() const noexcept { return catalog_columns_root_; }
+        page_id_t catalog_indexes_root() const noexcept { return catalog_indexes_root_; }
+        index_id_t next_index_id() const noexcept { return next_index_id_; }
         table_id_t next_table_id() const noexcept { return next_table_id_; }
         void set_catalog_tables_root(page_id_t id);
         void set_catalog_columns_root(page_id_t id);
+        void set_catalog_indexes_root(page_id_t id);
+        void set_next_index_id(index_id_t id);
         void set_next_table_id(table_id_t id);
 
         // Unpin a page; if dirty=true, marks for flush.
@@ -81,6 +85,8 @@ namespace kizuna
         uint32_t catalog_version_{config::CATALOG_SCHEMA_VERSION};
         page_id_t catalog_tables_root_{0};
         page_id_t catalog_columns_root_{0};
+        page_id_t catalog_indexes_root_{0};
+        index_id_t next_index_id_{1};
         table_id_t next_table_id_{1};
 
 

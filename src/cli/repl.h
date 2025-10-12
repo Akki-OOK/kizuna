@@ -14,6 +14,7 @@
 #include "storage/page_manager.h"
 #include "storage/record.h"
 #include "catalog/catalog_manager.h"
+#include "storage/index/index_manager.h"
 #include "engine/ddl_executor.h"
 #include "engine/dml_executor.h"
 
@@ -29,6 +30,7 @@ namespace kizuna
         std::unique_ptr<FileManager> fm_;
         std::unique_ptr<PageManager> pm_;
         std::unique_ptr<catalog::CatalogManager> catalog_;
+        std::unique_ptr<index::IndexManager> index_manager_;
         std::unique_ptr<engine::DDLExecutor> ddl_executor_;
         std::unique_ptr<engine::DMLExecutor> dml_executor_;
         std::string db_path_;

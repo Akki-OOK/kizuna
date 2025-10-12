@@ -1,6 +1,5 @@
 # CMake build directories
-build/
-build-*/
+build*/
 out/
 bin/
 lib/
@@ -44,11 +43,6 @@ Thumbs.db
 
 # Generated test binaries (if any)
 tests/*_test
-
-# Runtime data directories
-data/
-temp/
-backup/
 
 # Project-local docs you may not want to publish
 kizuna-SRS.md

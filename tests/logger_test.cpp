@@ -10,7 +10,7 @@ bool logger_tests()
 {
     try
     {
-        const std::string log_path = std::string(config::TEMP_DIR) + "logger_test.log";
+        const std::string log_path = (config::temp_dir() / "logger_test.log").string();
         Logger::instance().set_log_file(log_path);
         Logger::instance().set_level(LogLevel::DEBUG);
         Logger::instance().enable_console(false); // quiet tests

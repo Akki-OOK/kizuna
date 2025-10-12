@@ -1,6 +1,6 @@
-﻿# Kizuna V0.4 - Demo Script
+# Kizuna V0.5 - Demo Script
 
-This walkthrough shows the current SQL surface (DDL + richer DML) and the legacy storage tooling that still ships in the REPL. Use it as a lab script or as talking points when you walk someone through the project.
+This walkthrough shows the current SQL surface (DDL + richer DML + secondary indexes/ORDER BY) and the legacy storage tooling that still ships in the REPL. Use it as a lab script or as talking points when you walk someone through the project.
 
 ## 0. Prep
 - Build Debug once: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -34,7 +34,7 @@ Fresh databases report Tables (0).
 `
 Explain that table metadata lives in the catalog heap (page 1) and the table heap starts on the listed root page.
 
-## 3. INSERT and SELECT with projection, predicates, and LIMIT
+## 3. INSERT and SELECT with projection, predicates, LIMIT (and ORDER BY)
 `
 > INSERT INTO ook VALUES (1, 'nice', TRUE,  '2023-06-01', 'ace');
 > INSERT INTO ook VALUES (2, 'not nice', FALSE, '2022-05-05', NULL);
@@ -66,7 +66,7 @@ Updates are type-checked (DATE strings must parse, VARCHAR lengths respected) an
 `
 Explain that DELETE tombstones matching rows while TRUNCATE resets the heap and freelist linkage.
 
-## 6. DROP TABLE cleanup
+## 6. Secondary indexes (CREATE/DROP INDEX) and indexed scans\r\n\r\n> CREATE INDEX idx_ook_name ON ook(name);\r\n> show tables\r\n\r\nPoint out the new index entry in the catalog plus the on-disk index file under ./indexes/.\r\n\r\n\r\n> SELECT id, name FROM ook WHERE name = 'nice';\r\n\r\nHighlight that the DML executor now plans an index lookup rather than scanning the heap (DEBUG logs show index usage).\r\n\r\n\r\n> UPDATE ook SET name = 'very nice' WHERE id = 1;\r\n> SELECT id, name FROM ook WHERE name = 'very nice';\r\n\r\nShow that indexes stay consistent across UPDATEs.\r\n\r\n\r\n> DROP INDEX idx_ook_name;\r\n\r\nDemonstrate catalog/index manager lifecycle.\r\n\r\n## 7. DROP TABLE cleanup
 `
 > DROP TABLE IF EXISTS nope;
 > DROP TABLE ook;
@@ -74,7 +74,7 @@ Explain that DELETE tombstones matching rows while TRUNCATE resets the heap and 
 `
 DROP TABLE without the clause throws if the name is missing; the IF EXISTS form logs a "no-op" message instead of an error.
 
-## 7. Legacy storage commands (optional)
+## 8. Legacy storage commands (optional)
 These still help discuss the V0.1 page layout:
 `
 > newpage DATA
@@ -84,23 +84,30 @@ These still help discuss the V0.1 page layout:
 `
 Mention that the catalog and freelist share the same page manager API as user data.
 
-## 8. Error showcase
+## 9. Error showcase
 - Syntax: CREATE TABLE broken id INT); -> [SYNTAX_ERROR]
 - Duplicate column: CREATE TABLE dup (c INT, c INT);
 - Bad drop: DROP TABLE ghosts; -> [TABLE_NOT_FOUND]
 - Type mismatch: INSERT INTO ook VALUES (1); (wrong arity)
 - Constraint: UPDATE ook SET name = NULL WHERE id = 1; (NOT NULL violation)
 
-## 9. Logging tips
+## 10. Logging tips
 `
 > loglevel DEBUG
 `
 This prints every AST, executor call, and storage mutation. Call out how to drop back to INFO to cut the noise.
 
-## 10. Talking points
+## 11. Talking points
 - Parser now handles column projections, WHERE expressions (logical + comparison operators), LIMIT, UPDATE assignments, and NULL tests.
 - Expression evaluator uses tri-valued logic so NULL predicates propagate correctly.
 - Table heap updates reuse space when the payload fits, otherwise relocate without double-updating.
 - The REPL mirrors SQL output with projection-aware headers and row counts so manual verification is easy.
 - Page 1 remains the metadata root; free pages are tracked in a linked freelist.
 - Concurrency, WAL, and joins are future roadmap items (see docs/V0_4_PLAN.md).
+
+
+
+
+
+
+

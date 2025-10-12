@@ -42,6 +42,22 @@ namespace kizuna::catalog
         static ColumnCatalogEntry deserialize(const uint8_t *data, size_t size, size_t &consumed);
     };
 
+    struct IndexCatalogEntry
+    {
+        index_id_t index_id{0};
+        table_id_t table_id{0};
+        page_id_t root_page_id{0};
+        bool is_unique{false};
+        bool is_primary{false};
+        std::string name;
+        std::vector<column_id_t> column_ids;
+        std::string create_sql;
+
+        std::vector<uint8_t> serialize() const;
+        static IndexCatalogEntry deserialize(const uint8_t *data, size_t size, size_t &consumed);
+    };
+
+
     uint8_t encode_constraints(const ColumnConstraint &constraint) noexcept;
     ColumnConstraint decode_constraints(uint8_t mask, std::string default_literal);
 }

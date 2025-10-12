@@ -2,6 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+
+#include "common/path_utils.h"
 
 namespace kizuna
 {
@@ -55,11 +58,13 @@ namespace kizuna
         constexpr size_t MAX_COLUMNS_PER_TABLE = 1024;
         /// Maximum number of indexes per table
         constexpr size_t MAX_INDEXES_PER_TABLE = 64;
+        /// Maximum number of columns per index key (initial scope keeps this modest)
+        constexpr size_t MAX_COLUMNS_PER_INDEX = 4;
 
         // ==================== CATALOG CONFIGURATION ====================
 
         /// Catalog schema version (increment when layout changes)
-        constexpr uint32_t CATALOG_SCHEMA_VERSION = 2;
+        constexpr uint32_t CATALOG_SCHEMA_VERSION = 3;
 
         /// Internal catalog table names (modeled after SQLite's sqlite_master)
         constexpr const char *CATALOG_TABLES_NAME = "__tables__";
@@ -69,6 +74,8 @@ namespace kizuna
         /// Default on-disk naming for table storage files
         constexpr const char *TABLE_FILE_PREFIX = "table_";
         constexpr const char *TABLE_FILE_EXTENSION = ".db";
+        constexpr const char *INDEX_FILE_PREFIX = "index_";
+        constexpr const char *INDEX_FILE_EXTENSION = ".idx";
 
         // ==================== TRANSACTION CONFIGURATION ====================
 
@@ -87,7 +94,52 @@ namespace kizuna
         // ==================== LOGGING CONFIGURATION ====================
 
         /// Default log file name
-        constexpr const char *DEFAULT_LOG_FILE = "kizuna.log";
+        inline const std::filesystem::path &database_root_dir()
+        {
+            static const std::filesystem::path path = path_utils::executable_dir() / "database";
+            return path;
+        }
+
+        inline const std::filesystem::path &catalog_dir()
+        {
+            static const std::filesystem::path path = database_root_dir() / "catalog";
+            return path;
+        }
+
+        inline const std::filesystem::path &default_db_dir()
+        {
+            static const std::filesystem::path path = database_root_dir() / "data";
+            return path;
+        }
+
+        inline const std::filesystem::path &default_index_dir()
+        {
+            static const std::filesystem::path path = database_root_dir() / "indexes";
+            return path;
+        }
+
+        inline const std::filesystem::path &logs_dir()
+        {
+            static const std::filesystem::path path = database_root_dir() / "logs";
+            return path;
+        }
+
+        inline const std::filesystem::path &temp_dir()
+        {
+            static const std::filesystem::path path = database_root_dir() / "temp";
+            return path;
+        }
+
+        inline const std::filesystem::path &backup_dir()
+        {
+            static const std::filesystem::path path = database_root_dir() / "backup";
+            return path;
+        }
+
+        inline std::filesystem::path default_log_file()
+        {
+            return logs_dir() / "kizuna.log";
+        }
 
         /// Maximum log file size in MB before rotation
         constexpr size_t MAX_LOG_FILE_SIZE_MB = 10;
@@ -175,14 +227,6 @@ namespace kizuna
         constexpr const char *DB_FILE_EXTENSION = ".kz";
 
         /// Default database directory
-        constexpr const char *DEFAULT_DB_DIR = "./data/";
-
-        /// Temporary file directory
-        constexpr const char *TEMP_DIR = "./temp/";
-
-        /// Backup directory
-        constexpr const char *BACKUP_DIR = "./backup/";
-
         /// Lock file extension
         constexpr const char *LOCK_FILE_EXTENSION = ".lock";
 
@@ -231,4 +275,5 @@ namespace kizuna
 
     } // namespace config
 } // namespace kizuna
+
 

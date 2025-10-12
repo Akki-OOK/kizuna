@@ -12,7 +12,7 @@ namespace fs = std::filesystem;
 
 bool file_manager_tests()
 {
-    const std::string db_path = std::string(config::TEMP_DIR) + "fm_test" + config::DB_FILE_EXTENSION;
+    const std::string db_path = (config::temp_dir() / (std::string("fm_test") + config::DB_FILE_EXTENSION)).string();
 
     // Ensure clean
     std::error_code ec;

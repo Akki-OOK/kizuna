@@ -11,7 +11,7 @@ namespace fs = std::filesystem;
 
 bool page_manager_freelist_tests()
 {
-    const std::string db = std::string(config::TEMP_DIR) + "pm_freelist" + config::DB_FILE_EXTENSION;
+    const std::string db = (config::temp_dir() / (std::string("pm_freelist") + config::DB_FILE_EXTENSION)).string();
     std::error_code ec; fs::remove(db, ec);
 
     try

@@ -43,7 +43,7 @@ namespace kizuna
     Repl::Repl()
     {
         init_handlers();
-        db_path_ = std::string(config::DEFAULT_DB_DIR) + "demo" + config::DB_FILE_EXTENSION;
+        db_path_ = (config::default_db_dir() / (std::string("demo") + config::DB_FILE_EXTENSION)).string();
     }
 
     void Repl::init_handlers()
@@ -72,9 +72,10 @@ namespace kizuna
 
     void Repl::print_help() const
     {
+        const auto default_demo = (config::default_db_dir() / (std::string("demo") + config::DB_FILE_EXTENSION)).string();
         std::cout << "Commands:\n"
                   << "  help                      - show this help\n"
-                  << "  open [path]               - open/create database file (default: " << config::DEFAULT_DB_DIR << "demo" << config::DB_FILE_EXTENSION << ")\n"
+                  << "  open [path]               - open/create database file (default: " << default_demo << ")\n"
                   << "  status                    - show current status\n"
                   << "  show tables               - list tables in the current database\n"
                   << "  schema <table>            - show catalog info for a table\n"
@@ -96,7 +97,9 @@ namespace kizuna
                   << "  INSERT INTO <table> [(col,...)] VALUES (...);      - column-targeted inserts\n"
                   << "  SELECT col[, ...] FROM <table> [WHERE ...] [LIMIT n]; - projection + filtering\n"
                   << "  UPDATE <table> SET col = expr[, ...] [WHERE ...];    - edit rows in place\n"
-                  << "  DELETE FROM <table> [WHERE ...];                   - remove matching rows\n";
+                  << "  DELETE FROM <table> [WHERE ...];                   - remove matching rows\n"
+                  << "\nSQL DML (V0.5 additions):\n"
+                  << "  SELECT ... ORDER BY <col> [ASC|DESC] [LIMIT n];    - ordered results via indexes or in-memory sort\n";
     }
 
     std::vector<std::string> Repl::tokenize(const std::string &line)
@@ -142,14 +145,19 @@ namespace kizuna
 
     int Repl::run()
     {
-        std::cout << "Kizuna REPL (V0.4) - type 'help'\n";
+        std::cout << "Kizuna REPL (V0.5) - type 'help'\n";
+        Logger::instance().enable_console(false);
         Logger::instance().info("Starting REPL");
 
         try
         {
-            fs::create_directories(config::DEFAULT_DB_DIR);
-            fs::create_directories(config::TEMP_DIR);
-            fs::create_directories(config::BACKUP_DIR);
+            fs::create_directories(config::database_root_dir());
+            fs::create_directories(config::catalog_dir());
+            fs::create_directories(config::default_db_dir());
+            fs::create_directories(config::default_index_dir());
+            fs::create_directories(config::temp_dir());
+            fs::create_directories(config::backup_dir());
+            fs::create_directories(config::logs_dir());
         }
         catch (...)
         {
@@ -213,16 +221,44 @@ namespace kizuna
             std::cout << "Usage: open [path]\n";
             return;
         }
+
+        dml_executor_.reset();
+        ddl_executor_.reset();
+        index_manager_.reset();
+        catalog_.reset();
+        pm_.reset();
+        fm_.reset();
+
+        std::filesystem::path target_path;
         if (args.size() == 2)
-            db_path_ = args[1];
+        {
+            std::filesystem::path provided(args[1]);
+            if (!provided.has_parent_path())
+                target_path = config::default_db_dir() / provided;
+            else
+                target_path = provided;
+        }
+        else
+        {
+            target_path = config::default_db_dir() / std::string("demo");
+        }
+
+        if (!target_path.has_extension())
+            target_path += config::DB_FILE_EXTENSION;
+        else if (target_path.extension() != config::DB_FILE_EXTENSION)
+            target_path.replace_extension(config::DB_FILE_EXTENSION);
+
+        target_path = target_path.lexically_normal();
+        db_path_ = target_path.string();
         std::cout << "Opening: " << db_path_ << "\n";
 
         fm_ = std::make_unique<FileManager>(db_path_, /*create_if_missing*/ true);
         fm_->open();
         pm_ = std::make_unique<PageManager>(*fm_, /*capacity*/ 64);
         catalog_ = std::make_unique<catalog::CatalogManager>(*pm_, *fm_);
-        ddl_executor_ = std::make_unique<engine::DDLExecutor>(*catalog_, *pm_, *fm_);
-        dml_executor_ = std::make_unique<engine::DMLExecutor>(*catalog_, *pm_, *fm_);
+        index_manager_ = std::make_unique<index::IndexManager>();
+        ddl_executor_ = std::make_unique<engine::DDLExecutor>(*catalog_, *pm_, *fm_, *index_manager_);
+        dml_executor_ = std::make_unique<engine::DMLExecutor>(*catalog_, *pm_, *fm_, *index_manager_);
         Logger::instance().info("Opened DB ", db_path_);
     }
 

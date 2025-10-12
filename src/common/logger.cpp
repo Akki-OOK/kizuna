@@ -31,7 +31,7 @@ namespace kizuna
     }
 
     Logger::Logger()
-        : file_path_(config::DEFAULT_LOG_FILE),
+        : file_path_(config::default_log_file().string()),
           level_(LogLevel::INFO),
           console_enabled_(true)
     {

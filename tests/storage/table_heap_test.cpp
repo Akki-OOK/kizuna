@@ -27,11 +27,11 @@ namespace
         std::unique_ptr<PageManager> pm;
 
         TestContext(const std::string &name)
-            : db_path(std::string(config::TEMP_DIR) + name + config::DB_FILE_EXTENSION),
+            : db_path((config::temp_dir() / (name + config::DB_FILE_EXTENSION)).string()),
               fm(db_path, true)
         {
             std::error_code ec;
-            fs::create_directories(config::TEMP_DIR, ec);
+            fs::create_directories(config::temp_dir(), ec);
             fs::remove(db_path, ec);
             fm.open();
             pm = std::make_unique<PageManager>(fm, 8);

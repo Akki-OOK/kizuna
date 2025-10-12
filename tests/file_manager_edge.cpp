@@ -11,7 +11,7 @@ namespace fs = std::filesystem;
 
 bool file_manager_edge_tests()
 {
-    const std::string db = std::string(config::TEMP_DIR) + "fm_edge" + config::DB_FILE_EXTENSION;
+    const std::string db = (config::temp_dir() / (std::string("fm_edge") + config::DB_FILE_EXTENSION)).string();
     std::error_code ec; fs::remove(db, ec);
     FileManager fm(db, true);
     try

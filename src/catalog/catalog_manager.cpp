@@ -3,10 +3,10 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <utility>
 
 #include "common/config.h"
 #include "common/exception.h"
-
 namespace kizuna::catalog
 {
     namespace
@@ -60,6 +60,7 @@ namespace kizuna::catalog
     {
         tables_root_ = pm_.catalog_tables_root();
         columns_root_ = pm_.catalog_columns_root();
+        indexes_root_ = pm_.catalog_indexes_root();
 
         if (tables_root_ < config::FIRST_PAGE_ID)
         {
@@ -72,6 +73,12 @@ namespace kizuna::catalog
             columns_root_ = pm_.new_page(PageType::DATA);
             pm_.set_catalog_columns_root(columns_root_);
             pm_.unpin(columns_root_, false);
+        }
+        if (indexes_root_ < config::FIRST_PAGE_ID)
+        {
+            indexes_root_ = pm_.new_page(PageType::DATA);
+            pm_.set_catalog_indexes_root(indexes_root_);
+            pm_.unpin(indexes_root_, false);
         }
     }
 
@@ -88,6 +95,32 @@ namespace kizuna::catalog
         });
         tables_loaded_ = true;
     }
+
+    void CatalogManager::load_indexes_cache() const
+    {
+        if (indexes_loaded_)
+            return;
+
+        indexes_cache_.clear();
+        for_each_slot(pm_, indexes_root_, [this](const std::vector<uint8_t> &payload) {
+            size_t consumed = 0;
+            IndexCatalogEntry entry = IndexCatalogEntry::deserialize(payload.data(), payload.size(), consumed);
+            indexes_cache_.push_back(std::move(entry));
+        });
+        std::sort(indexes_cache_.begin(), indexes_cache_.end(), [](const IndexCatalogEntry &a, const IndexCatalogEntry &b) {
+            if (a.table_id == b.table_id)
+                return a.name < b.name;
+            return a.table_id < b.table_id;
+        });
+        indexes_loaded_ = true;
+    }
+
+    void CatalogManager::reload_indexes_cache() const
+    {
+        indexes_loaded_ = false;
+        load_indexes_cache();
+    }
+
 
     void CatalogManager::reload_tables_cache() const
     {
@@ -116,6 +149,23 @@ namespace kizuna::catalog
         });
         return result;
     }
+
+    std::vector<IndexCatalogEntry> CatalogManager::read_all_indexes() const
+    {
+        std::vector<IndexCatalogEntry> result;
+        for_each_slot(pm_, indexes_root_, [&result](const std::vector<uint8_t> &payload) {
+            size_t consumed = 0;
+            IndexCatalogEntry entry = IndexCatalogEntry::deserialize(payload.data(), payload.size(), consumed);
+            result.push_back(std::move(entry));
+        });
+        std::sort(result.begin(), result.end(), [](const IndexCatalogEntry &a, const IndexCatalogEntry &b) {
+            if (a.table_id == b.table_id)
+                return a.name < b.name;
+            return a.table_id < b.table_id;
+        });
+        return result;
+    }
+
 
     std::vector<ColumnCatalogEntry> CatalogManager::read_all_columns(table_id_t table_id) const
     {
@@ -174,6 +224,45 @@ namespace kizuna::catalog
         return read_all_columns(table_id);
     }
 
+    bool CatalogManager::index_exists(std::string_view name) const
+    {
+        return get_index(name).has_value();
+    }
+
+    std::optional<IndexCatalogEntry> CatalogManager::get_index(std::string_view name) const
+    {
+        load_indexes_cache();
+        auto it = std::find_if(indexes_cache_.begin(), indexes_cache_.end(), [name](const IndexCatalogEntry &entry) {
+            return entry.name == name;
+        });
+        if (it == indexes_cache_.end())
+        {
+            return std::nullopt;
+        }
+        return *it;
+    }
+
+    std::vector<IndexCatalogEntry> CatalogManager::get_indexes(table_id_t table_id) const
+    {
+        load_indexes_cache();
+        std::vector<IndexCatalogEntry> result;
+        for (const auto &entry : indexes_cache_)
+        {
+            if (entry.table_id == table_id)
+            {
+                result.push_back(entry);
+            }
+        }
+        return result;
+    }
+
+    std::vector<IndexCatalogEntry> CatalogManager::list_indexes() const
+    {
+        load_indexes_cache();
+        return indexes_cache_;
+    }
+
+
     void CatalogManager::persist_table_entry(const TableCatalogEntry &entry)
     {
         auto data = entry.serialize();
@@ -216,6 +305,27 @@ namespace kizuna::catalog
         }
     }
 
+    void CatalogManager::persist_index_entry(const IndexCatalogEntry &entry)
+    {
+        auto data = entry.serialize();
+        auto &page = pm_.fetch(indexes_root_, true);
+        try
+        {
+            slot_id_t slot{};
+            if (!page.insert(data.data(), static_cast<uint16_t>(data.size()), slot))
+            {
+                pm_.unpin(indexes_root_, false);
+                KIZUNA_THROW_STORAGE(StatusCode::PAGE_FULL, "Catalog index page full", std::to_string(indexes_root_));
+            }
+            pm_.unpin(indexes_root_, true);
+        }
+        catch (...)
+        {
+            pm_.unpin(indexes_root_, false);
+            throw;
+        }
+    }
+
     void CatalogManager::rewrite_tables_page(const std::vector<TableCatalogEntry> &entries)
     {
         Page page;
@@ -248,6 +358,98 @@ namespace kizuna::catalog
         }
         fm_.write_page(columns_root_, page.data());
         refresh_cached_page(pm_, columns_root_);
+    }
+
+    void CatalogManager::rewrite_indexes_page(const std::vector<IndexCatalogEntry> &entries)
+    {
+        Page page;
+        page.init(PageType::DATA, indexes_root_);
+        for (const auto &entry : entries)
+        {
+            auto data = entry.serialize();
+            slot_id_t slot{};
+            if (!page.insert(data.data(), static_cast<uint16_t>(data.size()), slot))
+            {
+                KIZUNA_THROW_STORAGE(StatusCode::PAGE_FULL, "Catalog index page full", std::to_string(indexes_root_));
+            }
+        }
+        fm_.write_page(indexes_root_, page.data());
+        refresh_cached_page(pm_, indexes_root_);
+    }
+
+
+    IndexCatalogEntry CatalogManager::create_index(IndexCatalogEntry entry)
+    {
+        ensure_catalog_pages();
+        load_indexes_cache();
+
+        if (entry.name.empty())
+        {
+            KIZUNA_THROW_QUERY(StatusCode::INVALID_ARGUMENT, "index name cannot be empty", "");
+        }
+        if (index_exists(entry.name))
+        {
+            KIZUNA_THROW_QUERY(StatusCode::DUPLICATE_KEY, "index already exists", std::string(entry.name));
+        }
+        auto owning_table = get_table(entry.table_id);
+        if (!owning_table.has_value())
+        {
+            KIZUNA_THROW_QUERY(StatusCode::TABLE_NOT_FOUND, "table not found for index", std::to_string(entry.table_id));
+        }
+        if (entry.column_ids.empty())
+        {
+            KIZUNA_THROW_QUERY(StatusCode::INVALID_ARGUMENT, "index requires at least one column", entry.name);
+        }
+
+        index_id_t new_id = pm_.next_index_id();
+        pm_.set_next_index_id(new_id + 1);
+        entry.index_id = new_id;
+
+        persist_index_entry(entry);
+        indexes_cache_.push_back(entry);
+        std::sort(indexes_cache_.begin(), indexes_cache_.end(), [](const IndexCatalogEntry &a, const IndexCatalogEntry &b) {
+            if (a.table_id == b.table_id)
+                return a.name < b.name;
+            return a.table_id < b.table_id;
+        });
+        indexes_loaded_ = true;
+        return entry;
+    }
+
+    void CatalogManager::set_index_root(index_id_t index_id, page_id_t root_page_id)
+    {
+        load_indexes_cache();
+        bool updated = false;
+        for (auto &entry : indexes_cache_)
+        {
+            if (entry.index_id == index_id)
+            {
+                entry.root_page_id = root_page_id;
+                updated = true;
+                break;
+            }
+        }
+        if (!updated)
+        {
+            KIZUNA_THROW_INDEX(StatusCode::INDEX_NOT_FOUND, "Index not found", std::to_string(index_id));
+        }
+        rewrite_indexes_page(indexes_cache_);
+    }
+
+    bool CatalogManager::drop_index(std::string_view name)
+    {
+        load_indexes_cache();
+        auto it = std::find_if(indexes_cache_.begin(), indexes_cache_.end(), [name](const IndexCatalogEntry &entry) {
+            return entry.name == name;
+        });
+        if (it == indexes_cache_.end())
+        {
+            return false;
+        }
+        indexes_cache_.erase(it);
+        rewrite_indexes_page(indexes_cache_);
+        indexes_loaded_ = true;
+        return true;
     }
 
     TableCatalogEntry CatalogManager::create_table(TableDef def, page_id_t root_page_id, const std::string &create_sql)
@@ -313,9 +515,24 @@ namespace kizuna::catalog
             }
         }
         rewrite_columns_page(filtered);
+        auto all_indexes = read_all_indexes();
+        std::vector<IndexCatalogEntry> index_filtered;
+        index_filtered.reserve(all_indexes.size());
+        for (auto &entry : all_indexes)
+        {
+            if (entry.table_id != removed.table_id)
+            {
+                index_filtered.push_back(std::move(entry));
+            }
+        }
+        rewrite_indexes_page(index_filtered);
+        indexes_cache_ = index_filtered;
+        indexes_loaded_ = true;
+
         return true;
     }
 }
+
 
 
 

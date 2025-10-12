@@ -30,11 +30,15 @@ set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 add_library(kizuna_common STATIC
     ${SOURCE_DIR}/common/exception.cpp
     ${SOURCE_DIR}/common/logger.cpp
+    ${SOURCE_DIR}/common/path_utils.cpp
     ${SOURCE_DIR}/common/value.cpp
     ${SOURCE_DIR}/storage/file_manager.cpp
     ${SOURCE_DIR}/storage/page_manager.cpp
     ${SOURCE_DIR}/storage/record.cpp
     ${SOURCE_DIR}/storage/table_heap.cpp
+    ${SOURCE_DIR}/storage/index/bplus_tree_node.cpp
+    ${SOURCE_DIR}/storage/index/bplus_tree.cpp
+    ${SOURCE_DIR}/storage/index/index_manager.cpp
     ${SOURCE_DIR}/catalog/schema.cpp
     ${SOURCE_DIR}/catalog/catalog_manager.cpp
     ${SOURCE_DIR}/sql/ast.cpp
@@ -78,6 +82,9 @@ add_executable(run_tests
     ${TEST_DIR}/engine/expression_evaluator_test.cpp
     ${TEST_DIR}/sql/ddl_parser_test.cpp
     ${TEST_DIR}/catalog/catalog_manager_test.cpp
+    ${TEST_DIR}/storage/bplus_tree_node_test.cpp
+    ${TEST_DIR}/index/bplus_tree_test.cpp
+    ${TEST_DIR}/index/index_manager_test.cpp
 )
 target_link_libraries(run_tests PRIVATE kizuna_common)
 target_include_directories(run_tests PRIVATE ${SOURCE_DIR})

@@ -1,9 +1,11 @@
 #include "catalog/schema.h"
 
+#include "common/config.h"
+
 #include <algorithm>
 #include <cstring>
 #include <limits>
-
+#include <string>
 
 namespace kizuna::catalog
 {
@@ -206,6 +208,96 @@ namespace kizuna::catalog
     return entry;
 }
 
+
+    std::vector<uint8_t> IndexCatalogEntry::serialize() const
+    {
+        if (name.size() > std::numeric_limits<uint16_t>::max())
+        {
+            KIZUNA_THROW_QUERY(StatusCode::INVALID_ARGUMENT, "index name too long", name);
+        }
+        if (column_ids.size() > config::MAX_COLUMNS_PER_INDEX)
+        {
+            KIZUNA_THROW_QUERY(StatusCode::INVALID_ARGUMENT, "too many columns in index", name);
+        }
+        if (column_ids.size() > std::numeric_limits<uint16_t>::max())
+        {
+            KIZUNA_THROW_QUERY(StatusCode::INVALID_ARGUMENT, "index column list too long", name);
+        }
+        if (create_sql.size() > std::numeric_limits<uint16_t>::max())
+        {
+            KIZUNA_THROW_QUERY(StatusCode::INVALID_ARGUMENT, "index definition too long", name);
+        }
+
+        std::vector<uint8_t> out;
+        out.reserve(32 + column_ids.size() * sizeof(uint32_t) + name.size() + create_sql.size());
+        write_u32(out, static_cast<uint32_t>(index_id));
+        write_u32(out, static_cast<uint32_t>(table_id));
+        write_u32(out, static_cast<uint32_t>(root_page_id));
+        out.push_back(is_unique ? 1 : 0);
+        out.push_back(is_primary ? 1 : 0);
+        write_u16(out, static_cast<uint16_t>(column_ids.size()));
+        for (auto column : column_ids)
+        {
+            write_u32(out, static_cast<uint32_t>(column));
+        }
+        write_u16(out, static_cast<uint16_t>(name.size()));
+        out.insert(out.end(), name.begin(), name.end());
+        write_u16(out, static_cast<uint16_t>(create_sql.size()));
+        out.insert(out.end(), create_sql.begin(), create_sql.end());
+        return out;
+    }
+
+    IndexCatalogEntry IndexCatalogEntry::deserialize(const uint8_t *data, size_t size, size_t &consumed)
+    {
+        IndexCatalogEntry entry;
+        size_t offset = 0;
+        uint32_t index_raw = 0;
+        uint32_t table_raw = 0;
+        uint32_t root_raw = 0;
+        if (!read_u32(data, size, offset, index_raw))
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "index_id");
+        if (!read_u32(data, size, offset, table_raw))
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "table_id");
+        if (!read_u32(data, size, offset, root_raw))
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "root_page");
+        if (offset >= size)
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "unique_flag");
+        uint8_t unique_flag = data[offset++];
+        if (offset >= size)
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "primary_flag");
+        uint8_t primary_flag = data[offset++];
+        uint16_t column_count = 0;
+        if (!read_u16(data, size, offset, column_count))
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "column_count");
+        if (column_count > config::MAX_COLUMNS_PER_INDEX)
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog column count too large", std::to_string(column_count));
+        entry.column_ids.reserve(column_count);
+        for (uint16_t i = 0; i < column_count; ++i)
+        {
+            uint32_t column_raw = 0;
+            if (!read_u32(data, size, offset, column_raw))
+                KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "column_id");
+            entry.column_ids.push_back(static_cast<column_id_t>(column_raw));
+        }
+        uint16_t name_len = 0;
+        if (!read_u16(data, size, offset, name_len))
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "name_len");
+        if (!read_bytes(data, size, offset, name_len, entry.name))
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "name");
+        uint16_t sql_len = 0;
+        if (!read_u16(data, size, offset, sql_len))
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "sql_len");
+        if (!read_bytes(data, size, offset, sql_len, entry.create_sql))
+            KIZUNA_THROW_RECORD(StatusCode::INVALID_RECORD_FORMAT, "index catalog truncated", "sql");
+
+        entry.index_id = static_cast<index_id_t>(index_raw);
+        entry.table_id = static_cast<table_id_t>(table_raw);
+        entry.root_page_id = static_cast<page_id_t>(root_raw);
+        entry.is_unique = unique_flag != 0;
+        entry.is_primary = primary_flag != 0;
+        consumed = offset;
+        return entry;
+    }
     uint8_t encode_constraints(const ColumnConstraint &constraint) noexcept
     {
         uint8_t mask = 0;
@@ -238,6 +330,8 @@ namespace kizuna::catalog
         return constraint;
     }
 }
+
+
 
 
 

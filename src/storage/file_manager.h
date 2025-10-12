@@ -35,7 +35,10 @@ namespace kizuna
 
         // Table file helpers for catalog-managed storage
         static std::string table_filename(table_id_t table_id);
-        static std::filesystem::path table_path(table_id_t table_id, const std::filesystem::path &directory = std::filesystem::path(config::DEFAULT_DB_DIR));
+        static std::filesystem::path table_path(table_id_t table_id, std::filesystem::path directory = config::default_db_dir());
+
+        static std::string index_filename(index_id_t index_id);
+        static std::filesystem::path index_path(index_id_t index_id, std::filesystem::path directory = config::default_index_dir());
         static bool exists(const std::filesystem::path &path) noexcept;
         static bool remove_file(const std::filesystem::path &path);
 

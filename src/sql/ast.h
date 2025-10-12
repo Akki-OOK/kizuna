@@ -17,7 +17,9 @@ namespace kizuna::sql
     enum class StatementKind
     {
         CREATE_TABLE,
-        DROP_TABLE
+        DROP_TABLE,
+        CREATE_INDEX,
+        DROP_INDEX
     };
 
     struct ColumnConstraintAST
@@ -48,6 +50,21 @@ namespace kizuna::sql
         std::string table_name;
         bool if_exists{false};
         bool cascade{false};
+    };
+
+    struct CreateIndexStatement
+    {
+        std::string index_name;
+        bool unique{false};
+        std::string table_name;
+        std::vector<std::string> column_names;
+        bool if_not_exists{false};
+    };
+
+    struct DropIndexStatement
+    {
+        std::string index_name;
+        bool if_exists{false};
     };
 
     // ------------------------------------------------------------------
@@ -156,12 +173,19 @@ namespace kizuna::sql
         std::vector<InsertRow> rows;
     };
 
+    struct OrderByClause
+    {
+        ColumnRef column;
+        bool ascending{true};
+    };
+
     struct SelectStatement
     {
         std::string table_name;
         std::vector<SelectItem> columns; // empty -> treated as '*'
         std::unique_ptr<Expression> where;
         std::optional<std::int64_t> limit;
+        std::optional<OrderByClause> order_by;
     };
 
     struct DeleteStatement

@@ -256,6 +256,16 @@ namespace kizuna::sql
                 {
                     stmt.where = parse_expression();
                 }
+                if (match_keyword("ORDER"))
+                {
+                    expect_keyword("BY");
+                    OrderByClause clause = parse_order_by_clause();
+                    if (peek().type == TokenType::SYMBOL && peek().symbol == ',')
+                    {
+                        syntax_error(peek(), "single ORDER BY column");
+                    }
+                    stmt.order_by = std::move(clause);
+                }
                 if (match_keyword("LIMIT"))
                 {
                     stmt.limit = parse_limit_value();
@@ -436,6 +446,21 @@ namespace kizuna::sql
                     items.push_back(SelectItem::column_item(parse_column_ref()));
                 } while (match_symbol(','));
                 return items;
+            }
+
+            OrderByClause parse_order_by_clause()
+            {
+                OrderByClause clause;
+                clause.column = parse_column_ref();
+                if (match_keyword("ASC"))
+                {
+                    clause.ascending = true;
+                }
+                else if (match_keyword("DESC"))
+                {
+                    clause.ascending = false;
+                }
+                return clause;
             }
 
             ColumnRef parse_column_ref()
@@ -715,4 +740,3 @@ namespace kizuna::sql
         throw QueryException::syntax_error(sql, first.position, "DML statement");
     }
 }
-

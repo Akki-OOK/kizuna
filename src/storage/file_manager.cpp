@@ -168,13 +168,27 @@ namespace kizuna
         return std::string(config::TABLE_FILE_PREFIX) + std::to_string(table_id) + config::TABLE_FILE_EXTENSION;
     }
 
-    std::filesystem::path FileManager::table_path(table_id_t table_id, const std::filesystem::path &directory)
+    std::filesystem::path FileManager::table_path(table_id_t table_id, std::filesystem::path directory)
     {
         if (directory.empty())
         {
-            return std::filesystem::path(config::DEFAULT_DB_DIR) / table_filename(table_id);
+            return config::default_db_dir() / table_filename(table_id);
         }
         return directory / table_filename(table_id);
+    }
+
+    std::string FileManager::index_filename(index_id_t index_id)
+    {
+        return std::string(config::INDEX_FILE_PREFIX) + std::to_string(index_id) + config::INDEX_FILE_EXTENSION;
+    }
+
+    std::filesystem::path FileManager::index_path(index_id_t index_id, std::filesystem::path directory)
+    {
+        if (directory.empty())
+        {
+            return config::default_index_dir() / index_filename(index_id);
+        }
+        return directory / index_filename(index_id);
     }
 
     bool FileManager::exists(const std::filesystem::path &path) noexcept

@@ -50,5 +50,40 @@ bool sql_ddl_parser_tests()
     }
     assert(caught);
 
+    try
+    {
+        auto stmt = sql::parse_create_index("CREATE UNIQUE INDEX idx_users_name ON users(name, email);");
+        assert(stmt.index_name == "idx_users_name");
+        assert(stmt.unique);
+        assert(stmt.table_name == "users");
+        assert(stmt.column_names.size() == 2);
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    try
+    {
+        auto stmt = sql::parse_drop_index("DROP INDEX IF EXISTS idx_users_name;");
+        assert(stmt.index_name == "idx_users_name");
+        assert(stmt.if_exists);
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    try
+    {
+        auto ddl = sql::parse_ddl("CREATE INDEX idx_users_age ON users(age);");
+        assert(ddl.kind == sql::StatementKind::CREATE_INDEX);
+        assert(ddl.create_index.index_name == "idx_users_age");
+    }
+    catch (...)
+    {
+        return false;
+    }
+
     return true;
 }

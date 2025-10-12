@@ -17,6 +17,9 @@ bool record_tests();
 bool value_tests();
 bool page_manager_freelist_tests();
 bool table_heap_tests();
+bool bplus_tree_tests();
+bool bplus_tree_node_tests();
+bool index_manager_tests();
 bool sql_dml_parser_tests();
 bool sql_ddl_parser_tests();
 bool catalog_manager_ddl_tests();
@@ -36,6 +39,9 @@ int main()
         {"page_manager_tests", &page_manager_tests},
         {"page_manager_freelist_tests", &page_manager_freelist_tests},
         {"table_heap_tests", &table_heap_tests},
+        {"bplus_tree_tests", &bplus_tree_tests},
+        {"index_manager_tests", &index_manager_tests},
+        {"bplus_tree_node_tests", &bplus_tree_node_tests},
         {"sql_dml_parser_tests", &sql_dml_parser_tests},
         {"sql_ddl_parser_tests", &sql_ddl_parser_tests},
         {"expression_evaluator_tests", &expression_evaluator_tests},

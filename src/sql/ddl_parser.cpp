@@ -257,6 +257,75 @@ namespace kizuna::sql
                     throw QueryException::syntax_error(std::string(input_), peek().position, "end of statement");
                 }
             }
+
+            CreateIndexStatement parse_create_index()
+            {
+                expect_keyword("CREATE");
+                CreateIndexStatement stmt;
+                if (match_keyword("UNIQUE"))
+                {
+                    stmt.unique = true;
+                }
+
+                expect_keyword("INDEX");
+
+                if (match_keyword("IF"))
+                {
+                    expect_keyword("NOT");
+                    expect_keyword("EXISTS");
+                    stmt.if_not_exists = true;
+                }
+
+                Token index_name = expect_identifier();
+                stmt.index_name = index_name.text;
+
+                expect_keyword("ON");
+                Token table_name = expect_identifier();
+                stmt.table_name = table_name.text;
+
+                expect_symbol('(');
+                bool first = true;
+                while (true)
+                {
+                    if (!first)
+                    {
+                        if (match_symbol(')'))
+                            break;
+                        expect_symbol(',');
+                    }
+                    else
+                    {
+                        first = false;
+                    }
+
+                    Token column_tok = expect_identifier();
+                    stmt.column_names.push_back(column_tok.text);
+
+                    if (match_symbol(')'))
+                        break;
+                }
+                expect_end();
+                return stmt;
+            }
+
+            DropIndexStatement parse_drop_index()
+            {
+                expect_keyword("DROP");
+                expect_keyword("INDEX");
+
+                DropIndexStatement stmt;
+                if (match_keyword("IF"))
+                {
+                    expect_keyword("EXISTS");
+                    stmt.if_exists = true;
+                }
+
+                Token name = expect_identifier();
+                stmt.index_name = name.text;
+
+                expect_end();
+                return stmt;
+            }
     CreateTableStatement parse_create_table()
             {
                 expect_keyword("CREATE");
@@ -413,18 +482,34 @@ namespace kizuna::sql
             return lexer.tokens();
         }
     } // namespace
+    CreateIndexStatement parse_create_index(std::string_view sql)
+    {
+        auto tokens = lex(sql);
+        Parser parser(sql, tokens);
+        return parser.parse_create_index();
+    }
+
+    DropIndexStatement parse_drop_index(std::string_view sql)
+    {
+        auto tokens = lex(sql);
+        Parser parser(sql, tokens);
+        return parser.parse_drop_index();
+    }
+
     CreateTableStatement parse_create_table(std::string_view sql)
     {
         auto tokens = lex(sql);
         Parser parser(sql, tokens);
         return parser.parse_create_table();
     }
+
     DropTableStatement parse_drop_table(std::string_view sql)
     {
         auto tokens = lex(sql);
         Parser parser(sql, tokens);
         return parser.parse_drop_table();
     }
+
     ParsedDDL parse_ddl(std::string_view sql)
     {
         auto tokens = lex(sql);
@@ -433,12 +518,48 @@ namespace kizuna::sql
         const Token &tok = parser.peek();
         if (tok.type == TokenType::IDENT && tok.upper == "CREATE")
         {
+            const Token &next = parser.peek(1);
+            if (next.type == TokenType::IDENT && next.upper == "TABLE")
+            {
+                parsed.kind = StatementKind::CREATE_TABLE;
+                parsed.create = parser.parse_create_table();
+                return parsed;
+            }
+            if (next.type == TokenType::IDENT && next.upper == "INDEX")
+            {
+                parsed.kind = StatementKind::CREATE_INDEX;
+                parsed.create_index = parser.parse_create_index();
+                return parsed;
+            }
+            if (next.type == TokenType::IDENT && next.upper == "UNIQUE")
+            {
+                const Token &after_unique = parser.peek(2);
+                if (after_unique.type == TokenType::IDENT && after_unique.upper == "INDEX")
+                {
+                    parsed.kind = StatementKind::CREATE_INDEX;
+                    parsed.create_index = parser.parse_create_index();
+                    return parsed;
+                }
+            }
             parsed.kind = StatementKind::CREATE_TABLE;
             parsed.create = parser.parse_create_table();
             return parsed;
         }
         if (tok.type == TokenType::IDENT && tok.upper == "DROP")
         {
+            const Token &next = parser.peek(1);
+            if (next.type == TokenType::IDENT && next.upper == "TABLE")
+            {
+                parsed.kind = StatementKind::DROP_TABLE;
+                parsed.drop = parser.parse_drop_table();
+                return parsed;
+            }
+            if (next.type == TokenType::IDENT && next.upper == "INDEX")
+            {
+                parsed.kind = StatementKind::DROP_INDEX;
+                parsed.drop_index = parser.parse_drop_index();
+                return parsed;
+            }
             parsed.kind = StatementKind::DROP_TABLE;
             parsed.drop = parser.parse_drop_table();
             return parsed;
@@ -446,8 +567,6 @@ namespace kizuna::sql
         throw QueryException::syntax_error(std::string(sql), tok.position, "CREATE or DROP");
     }
 }
-
-
 
 
 

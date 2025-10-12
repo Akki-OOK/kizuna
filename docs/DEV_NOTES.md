@@ -1,4 +1,4 @@
-﻿Kizuna - Developer Notes (V0.4 WIP)
+Kizuna - Developer Notes (V0.5 WIP)
 
 Overview
 - Storage-first teaching database covering catalogued SQL DDL (V0.2) and richer SQL DML (V0.4 predicates, UPDATE/DELETE with WHERE, LIMIT).
@@ -18,11 +18,11 @@ Modules
 - storage/table_heap.h/.cpp: Table-level helper that appends, iterates, tombstones, and truncates across chained DATA pages.
 - catalog/schema.h/.cpp: Serializable structs for tables/columns; versions stay in sync with SRS schema spec.
 - catalog/catalog_manager.h/.cpp: CRUD on catalog records + table root tracking + file lifecycle.
-- sql/ast.h: AST nodes for both DDL and DML (CreateTable, DropTable, InsertStmt, SelectStmt, DeleteStmt, TruncateStmt).
-- sql/ddl_parser.h/.cpp & sql/dml_parser.h/.cpp: Hand-written recursive-descent parsers with friendlier error text.
-- engine/ddl_executor.h/.cpp: Bind DDL ASTs into catalog mutations and storage allocations, with constraint enforcement.
-- engine/dml_executor.h/.cpp: Execute INSERT/SELECT/DELETE/UPDATE/TRUNCATE with projection, predicate pushdown, LIMIT enforcement, and TableHeap updates.
-- engine/expression_evaluator.h/.cpp: Evaluate expression AST nodes with tri-valued logic, type coercion, and column bindings for WHERE/SET clauses.
+- sql/ast.h: AST nodes for DDL/DML including CREATE/DROP INDEX metadata and SELECT ORDER BY clauses.
+- sql/ddl_parser.h/.cpp & sql/dml_parser.h/.cpp: Hand-written recursive-descent parsers spanning CREATE/DROP INDEX and ORDER BY grammar with friendlier error text.
+- engine/ddl_executor.h/.cpp: Bind DDL/INDEX ASTs into catalog mutations and storage allocations, with constraint enforcement.
+- engine/dml_executor.h/.cpp: Execute INSERT/SELECT/DELETE/UPDATE/TRUNCATE with projection, predicate pushdown, LIMIT/ORDER BY enforcement, table heap updates, and index maintenance.
+- engine/expression_evaluator.h/.cpp: Evaluate expression AST nodes with tri-valued logic, type coercion, and column bindings for WHERE/SET/ORDER BY clauses.
 - cli/repl.h/.cpp: Command handlers (status/show/schema) plus SQL dispatcher that routes DDL/DML and prints results.
 
 Testing
@@ -53,7 +53,7 @@ Change Log (append new bullets as we iterate)
 - Added: TableHeap update path with relocate-or-reuse semantics and iterator scan helper (V0.4 Step 4).
 - Added: DML executor predicate pushdown, projections, LIMIT, and typed UPDATE flow (V0.4 Step 5).
 - Added: REPL DML UX refresh with projection-aware printing and row-count summaries (V0.4 Step 6).
-- Added: Extended parser/expression/dml tests plus README/DEMO updates (V0.4 Step 7).
+- Added: Extended parser/expression/dml tests plus README/DEMO updates (V0.4 Step 7).\r\n- Added: B+ tree index storage layer, index manager, and catalog metadata wiring (V0.5 Step 1-4).\r\n- Added: CREATE/DROP INDEX grammar + auto primary-key indexes in DDL executor (V0.5 Step 5-6).\r\n- Added: Index-maintained DML executor with equality/range scans and UPDATE support (V0.5 Step 7).\r\n- Added: SELECT ORDER BY parsing/execution with index-aware planning and fallback sorting plus updated REPL UX/docs/tests (V0.5 Step 8-9).
 
 Troubleshooting Log (Issues & Fixes)
 - IntelliSense C++20 mismatch: set IDE standard to C++20 to match CMake flags.
@@ -78,5 +78,7 @@ Test Enhancements (Edge Cases)
 
 Demo Script
 - Walkthrough lives in docs/DEMO.md; shows new DML flow (INSERT -> SELECT -> DELETE/TRUNCATE) plus legacy storage ops.
+
+
 
 

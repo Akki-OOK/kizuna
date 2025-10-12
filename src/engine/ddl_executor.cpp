@@ -25,8 +25,9 @@ namespace kizuna::engine
 
     DDLExecutor::DDLExecutor(catalog::CatalogManager &catalog,
                              PageManager &pm,
-                             FileManager &fm)
-        : catalog_(catalog), pm_(pm), fm_(fm)
+                             FileManager &fm,
+                             index::IndexManager &index_manager)
+        : catalog_(catalog), pm_(pm), fm_(fm), index_manager_(index_manager)
     {
     }
 
@@ -45,12 +46,14 @@ namespace kizuna::engine
     std::string DDLExecutor::execute(std::string_view sql)
     {
         auto ddl = sql::parse_ddl(sql);
-        if (ddl.kind == sql::StatementKind::CREATE_TABLE)
+        switch (ddl.kind)
+        {
+        case sql::StatementKind::CREATE_TABLE:
         {
             auto entry = create_from_ast(ddl.create, sql);
             return "Table created: " + entry.name;
         }
-        if (ddl.kind == sql::StatementKind::DROP_TABLE)
+        case sql::StatementKind::DROP_TABLE:
         {
             bool dropped = drop_from_ast(ddl.drop);
             if (dropped)
@@ -59,9 +62,24 @@ namespace kizuna::engine
             }
             return "Table not found (no-op): " + ddl.drop.table_name;
         }
+        case sql::StatementKind::CREATE_INDEX:
+        {
+            return create_index_from_ast(ddl.create_index, sql);
+        }
+        case sql::StatementKind::DROP_INDEX:
+        {
+            bool dropped = drop_index_from_ast(ddl.drop_index);
+            if (dropped)
+            {
+                return "Index dropped: " + ddl.drop_index.index_name;
+            }
+            return "Index not found (no-op): " + ddl.drop_index.index_name;
+        }
+        default:
+            break;
+        }
         throw DBException(StatusCode::NOT_IMPLEMENTED, "DDL not supported yet", std::string(sql));
     }
-
     catalog::TableCatalogEntry DDLExecutor::create_from_ast(const sql::CreateTableStatement &stmt,
                                                            std::string_view original_sql)
     {
@@ -76,6 +94,7 @@ namespace kizuna::engine
 
         std::unordered_set<std::string> seen_names;
         bool primary_key_seen = false;
+        std::string primary_key_name;
         def.columns.reserve(stmt.columns.size());
         for (std::size_t i = 0; i < stmt.columns.size(); ++i)
         {
@@ -92,6 +111,7 @@ namespace kizuna::engine
                 if (primary_key_seen)
                     throw QueryException::invalid_constraint("multiple PRIMARY KEY columns");
                 primary_key_seen = true;
+                primary_key_name = column.name;
             }
             def.columns.push_back(std::move(column));
         }
@@ -100,6 +120,17 @@ namespace kizuna::engine
         pm_.unpin(root_page_id, false);
 
         catalog::TableCatalogEntry entry = catalog_.create_table(def, root_page_id, std::string(original_sql));
+
+        if (!primary_key_name.empty())
+        {
+            sql::CreateIndexStatement pk_stmt;
+            pk_stmt.index_name = entry.name + "_pk";
+            pk_stmt.unique = true;
+            pk_stmt.table_name = entry.name;
+            pk_stmt.column_names.push_back(primary_key_name);
+            pk_stmt.if_not_exists = true;
+            (void)create_index_from_ast(pk_stmt, "AUTO PRIMARY KEY INDEX", true);
+        }
 
         auto table_file = FileManager::table_path(entry.table_id);
         std::error_code ec;
@@ -128,6 +159,11 @@ namespace kizuna::engine
             throw QueryException::table_not_found(stmt.table_name);
         }
         const auto table_entry = table_opt.value();
+        auto indexes = catalog_.get_indexes(table_entry.table_id);
+        for (const auto &idx_entry : indexes)
+        {
+            index_manager_.DropIndex(idx_entry);
+        }
         bool removed = catalog_.drop_table(stmt.table_name, stmt.cascade);
         if (!removed)
         {
@@ -146,6 +182,80 @@ namespace kizuna::engine
         return true;
     }
 
+    std::string DDLExecutor::create_index_from_ast(const sql::CreateIndexStatement &stmt,
+                                                   std::string_view original_sql,
+                                                   bool is_primary)
+    {
+        if (stmt.index_name.empty())
+            throw QueryException::syntax_error(std::string(original_sql), 0, "index name");
+
+        if (catalog_.index_exists(stmt.index_name))
+        {
+            if (stmt.if_not_exists)
+            {
+                return "Index already exists (no-op): " + stmt.index_name;
+            }
+            throw QueryException::invalid_constraint("index already exists: " + stmt.index_name);
+        }
+
+        auto table_opt = catalog_.get_table(stmt.table_name);
+        if (!table_opt)
+        {
+            throw QueryException::table_not_found(stmt.table_name);
+        }
+        const auto table_entry = table_opt.value();
+        auto columns = catalog_.get_columns(table_entry.table_id);
+
+        if (stmt.column_names.empty())
+            throw QueryException::syntax_error(std::string(original_sql), 0, "column list");
+
+        std::vector<column_id_t> column_ids;
+        column_ids.reserve(stmt.column_names.size());
+        for (const auto &name : stmt.column_names)
+        {
+            std::string normalized = normalize_identifier(name);
+            auto it = std::find_if(columns.begin(), columns.end(), [&](const catalog::ColumnCatalogEntry &entry) {
+                return normalize_identifier(entry.column.name) == normalized;
+            });
+            if (it == columns.end())
+            {
+                throw QueryException::column_not_found(name, stmt.table_name);
+            }
+            column_ids.push_back(it->column_id);
+        }
+
+        catalog::IndexCatalogEntry entry;
+        entry.table_id = table_entry.table_id;
+        entry.name = stmt.index_name;
+        entry.is_unique = stmt.unique;
+        entry.is_primary = is_primary;
+        entry.column_ids = column_ids;
+        entry.root_page_id = config::INVALID_PAGE_ID;
+        entry.create_sql = std::string(original_sql);
+
+        auto created = catalog_.create_index(entry);
+        auto handle = index_manager_.CreateIndex(created);
+        created.root_page_id = handle->tree().root_page_id();
+        catalog_.set_index_root(created.index_id, created.root_page_id);
+        return "Index created: " + created.name;
+    }
+
+    bool DDLExecutor::drop_index_from_ast(const sql::DropIndexStatement &stmt)
+    {
+        auto index_opt = catalog_.get_index(stmt.index_name);
+        if (!index_opt)
+        {
+            if (stmt.if_exists)
+            {
+                return false;
+            }
+            throw IndexException::key_not_found(stmt.index_name, stmt.index_name);
+        }
+
+        const auto entry = index_opt.value();
+        index_manager_.DropIndex(entry);
+        return catalog_.drop_index(stmt.index_name);
+    }
     ColumnConstraint DDLExecutor::map_constraint(const sql::ColumnConstraintAST &constraint)
     {
         ColumnConstraint result;
