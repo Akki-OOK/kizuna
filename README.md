@@ -1,6 +1,6 @@
 # Kizuna (V0.5)
 
-Kizuna is a lightweight, teaching-focused DBMS written in modern C++ (C++20). V0.5 layers secondary indexing and ORDER BY support on top of the V0.4 predicate-aware SQL engine: CREATE/DROP INDEX, automatic primary-key indexes, index-maintained INSERT/UPDATE/DELETE flows, index-backed equality/range scans, and SELECT ORDER BY with index or in-memory sort fallback.
+Kizuna is a lightweight, learning-focused DBMS written in modern C++ (C++20). V0.5 layers secondary indexing and ORDER BY support on top of the V0.4 predicate-aware SQL engine: CREATE/DROP INDEX, automatic primary-key indexes, index-maintained INSERT/UPDATE/DELETE flows, index-backed equality/range scans, and SELECT ORDER BY with index or in-memory sort fallback.
 
 ## Feature Highlights
 
